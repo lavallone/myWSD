@@ -34,7 +34,7 @@ class WSD_Model(pl.LightningModule):
                
     def forward(self, batch):
         text = batch["inputs"]
-        embed_text = self.encoder(text["input_ids"], attention_mask=text["attention_mask"], token_type_ids=text["token_type_ids"], output_hidden_states=True)
+        embed_text = self.encoder(text["input_ids"].to(self.device), attention_mask=text["attention_mask"].to(self.device), token_type_ids=text["token_type_ids"].to(self.device), output_hidden_states=True)
         # I take the hidden representation of the last four layers of each token
         #embed_text = torch.stack(embed_text.hidden_states[-4:], dim=0).sum(dim=0) # sum
         #embed_text = torch.stack(embed_text.hidden_states[-4:], dim=0).sum(dim=0) # mean

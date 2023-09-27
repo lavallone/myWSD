@@ -49,16 +49,17 @@ def main(arguments):
         wandb.finish()
     
     elif arguments.mode == "eval":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         if arguments.type == "coarse" or arguments.type == "fine":
             ckpt = arguments.model
-            model = WSD_Model.load_from_checkpoint(ckpt, strict=False, device="cuda" if torch.cuda.is_available() else "cpu")
+            model = WSD_Model.load_from_checkpoint(ckpt, strict=False).to(device)
             data = WSD_DataModule(model.hparams)
             data.setup()
             base_evaluation(model, data)
         
         elif arguments.type == "fine2cluster":
             ckpt = arguments.model
-            model = WSD_Model.load_from_checkpoint(ckpt, strict=False, device="cuda" if torch.cuda.is_available() else "cpu")
+            model = WSD_Model.load_from_checkpoint(ckpt, strict=False).to(device)
             assert model.hparams.coarse_or_fine == "fine"
             data = WSD_DataModule(model.hparams)
             data.setup()
@@ -68,10 +69,10 @@ def main(arguments):
         elif arguments.type == "cluster_filter":
             ckpt1 = arguments.model
             ckpt2 = arguments.model2
-            coarse_model = WSD_Model.load_from_checkpoint(ckpt1, strict=False, device="cuda" if torch.cuda.is_available() else "cpu")
-            assert model.hparams.coarse_or_fine == "coarse"
-            fine_model = WSD_Model.load_from_checkpoint(ckpt2, strict=False, device="cuda" if torch.cuda.is_available() else "cpu")
-            assert model.hparams.coarse_or_fine == "fine"
+            coarse_model = WSD_Model.load_from_checkpoint(ckpt1, strict=False).to(device)
+            assert coarse_model.hparams.coarse_or_fine == "coarse"
+            fine_model = WSD_Model.load_from_checkpoint(ckpt2, strict=False).to(device)
+            assert fine_model.hparams.coarse_or_fine == "fine"
             data = WSD_DataModule(coarse_model.hparams)
             data.setup()
             # evaluation on fine senses using a coarse model for filtering out
