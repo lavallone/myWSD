@@ -66,7 +66,7 @@ class WSD_Model(pl.LightningModule):
     def loss_function(self, outputs, labels):
         loss_function = nn.BCEWithLogitsLoss()
         # one-hot encoding for the gold senses (multi-label problem)
-        one_hot_encoding_labels = torch.zeros([self.hparams.batch_size, self.num_senses], dtype=torch.float32).to(self.device)
+        one_hot_encoding_labels = torch.zeros([outputs.shape[0], self.num_senses], dtype=torch.float32).to(self.device)
         for i,l in enumerate(labels):
             one_hot_encoding_labels[i, l] = 1
         loss = loss_function(outputs, one_hot_encoding_labels)

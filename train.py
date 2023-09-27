@@ -11,7 +11,7 @@ def train_model(data, model, experiment_name, metric_to_monitor, mode, epochs, p
     # we also want to save the best checkpoints during training
     checkpoint_callback = ModelCheckpoint(
     save_top_k=1, monitor=metric_to_monitor, mode=mode, dirpath="checkpoints",
-    filename=experiment_name + "-{epoch:02d}-{val_micro_f1:.4f}", verbose=True)
+    filename=experiment_name + "-{epoch:02d}-{val_accuracy:.4f}", verbose=True)
     
     n_gpus = 1 if torch.cuda.is_available() else 0
     trainer = Trainer(

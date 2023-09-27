@@ -58,7 +58,7 @@ def read_dataset(path):
     sentences_list, senses_list = [], []
     with open(path) as f:
         data = json.load(f)
-    for sentence_data in data.values():
+    for sentence_data in list(data.values()):#[:100]:
         assert len(sentence_data["instance_ids"]) > 0
         assert len(sentence_data["words"]) == len(sentence_data["lemmas"]) == len(sentence_data["pos_tags"])
         sentence = " ".join(sentence_data["words"])

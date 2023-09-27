@@ -27,7 +27,7 @@ def parse_args():
     # experiments parameters
     parser.add_argument("--mode", type=str, default="train", help="train/eval", required=True)
     parser.add_argument("--type", type=str, default="coarse", help="coarse/fine/fine2cluster/cluster_filter", required=True)
-    parser.add_argument("--model", type=str, default="checkpoints/coarse.ckpt", help="path to model", required=True)
+    parser.add_argument("--model", type=str, default="checkpoints/coarse.ckpt", help="path to model", required=False)
     parser.add_argument("--model2", type=str, default="checkpoints/coarse.ckpt", help="path to second model", required=False)
     parser.add_argument("--oracle", type=str, default="False", help="use or not the oracle in the 'cluster_filter' scenario", required=False)
     return parser.parse_args()
@@ -44,7 +44,7 @@ def main(arguments):
             model = WSD_Model(hparams)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model.to(device)
-            train_model(data, model, experiment_name=version_name, metric_to_monitor="val_loss", mode="min", epochs=100, precision=hparams["precision"])
+            train_model(data, model, experiment_name=version_name, metric_to_monitor="val_loss", mode="min", epochs=10, precision=hparams["precision"])
 
         wandb.finish()
     
