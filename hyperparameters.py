@@ -4,7 +4,7 @@ from dataclasses import dataclass
 class Hparams:
     
     ## dataloader params
-    coarse_or_fine: str = "coarse" # coarse-grained or fine-grained task
+    coarse_or_fine: str = "fine" # coarse-grained or fine-grained task
     data_train: str = "data/wsd_datasets/training_sets/mapped_semcor.json" # train dataset path
     data_val: str = "data/wsd_datasets/evaluation_sets/mapped_semeval2007.json" # validation dataset path
     data_test: str = "data/wsd_datasets/evaluation_sets/mapped_ALLamended.json" # test dataset path
@@ -14,8 +14,8 @@ class Hparams:
     
     ## train params
     lr: float = 1e-4
-    precision: int = 16 # 16 or 32 precision training
+    precision: int = 32 # 16 or 32 precision training
     
     ## model params
     hidden_dim: int = 512 
-    dropout: float = 0.6 # dropout value ?
+    dropout: float = 0.6 # dropout value
