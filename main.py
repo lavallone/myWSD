@@ -44,7 +44,7 @@ def main(arguments):
             model = WSD_Model(hparams)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model.to(device)
-            train_model(data, model, experiment_name=version_name, metric_to_monitor="val_loss", mode="min", epochs=10, precision=hparams["precision"])
+            train_model(data, model, experiment_name=version_name, metric_to_monitor="val_loss", mode="min", epochs=5, precision=hparams["precision"])
 
         wandb.finish()
     

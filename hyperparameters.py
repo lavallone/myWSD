@@ -14,7 +14,7 @@ class Hparams:
     
     ## train params
     lr: float = 1e-4
-    precision: int = 32 # 16 or 32 precision training
+    precision: int = 16 # 16 or 32 precision training
     
     ## model params
     hidden_dim: int = 512 

@@ -5,6 +5,8 @@ import pytorch_lightning as pl
 from transformers import BertModel
 from torchmetrics import Accuracy
 import json
+import wandb
+import random
 
 class WSD_Model(pl.LightningModule):
     def __init__(self, hparams):
@@ -26,7 +28,7 @@ class WSD_Model(pl.LightningModule):
         self.classifier = nn.Linear(self.hparams.hidden_dim, self.num_senses, bias=False) # final linear projection with no bias
         
         # mapping from 'id' to name of the 'sense'
-        #self.id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data/mapping/fine_id2sense.json", "r"))
+        self.id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data/mapping/fine_id2sense.json", "r"))
         
         # validation ACCURACY
         self.accuracy = Accuracy(task="multiclass", num_classes=self.num_senses)
@@ -114,7 +116,25 @@ class WSD_Model(pl.LightningModule):
         # ACCURACY
         filter_ids = batch["cluster_candidates"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
         preds = self.predict(batch, filter_ids)
+        
+        # DEBUG info for one random item of the batch
+        item_idx = random.randint(0, len(labels)-1)
+        candidates = [self.id2sense[str(e)] for e in filter_ids[item_idx]]
+        gold = [self.id2sense[str(e)] for e in labels[item_idx]]
+        pred = [self.id2sense[str(preds[item_idx])]]
+        debug_infos = {"debug_infos" : str(candidates) + " | " + str(gold) + " | " + str(pred)}
+        
         labels = self.manipulate_labels(labels, preds)
         assert len(preds) == len(labels)
         self.accuracy.update(torch.tensor(preds), torch.tensor(labels))
         self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.hparams.batch_size)
+        
+        return debug_infos
+    
+    # at the end of the epoch, we log the DEBUG infos of each batch
+    def validation_epoch_end(self, outputs):
+        c = [str(i+1) for i in range(len(outputs))]
+        data = []
+        for i in range(len(outputs)):
+            data.append(outputs[i]["debug_infos"])
+        self.logger.experiment.log({f"debug_infos_{self.current_epoch}": wandb.Table(columns=c, data=[data])})
