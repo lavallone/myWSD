@@ -176,7 +176,7 @@ class WSD_DataModule(pl.LightningDataModule):
     # for efficiency reasons, each time we pick a batch from the dataloader, we call this function!
     def collate(self, batch):
         batch_out = dict()
-        tokenizer = BertTokenizerFast.from_pretrained("bert-large-uncased")
+        tokenizer = BertTokenizerFast.from_pretrained("bert-large-cased")
         # notice that I used FastTokenizers because they have 'word_ids()' method which I need for the token-embedddings mapping!
         batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt")
         # we now map token idx to embedding indices (from sense_idx to sense_ids)

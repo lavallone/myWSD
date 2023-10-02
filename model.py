@@ -13,7 +13,7 @@ class WSD_Model(pl.LightningModule):
         super(WSD_Model, self).__init__()
         self.save_hyperparameters(hparams)
         print(f"___________ {self.hparams.coarse_or_fine} MODEL ___________\n")
-        self.encoder = BertModel.from_pretrained("bert-large-uncased") # there's the possibility to not download it each time!
+        self.encoder = BertModel.from_pretrained("bert-large-cased") # there's the possibility to not download it each time!
         
         # we set all parameters to be not trainable
         for param in self.encoder.parameters():
@@ -53,7 +53,7 @@ class WSD_Model(pl.LightningModule):
             encoder_output_list.append(word_emb)
         encoder_output = torch.stack(encoder_output_list, dim=0) # (batch, 4096)
         
-        encoder_output_norm = self.batch_norm(self.dropout(encoder_output))
+        encoder_output_norm = self.batch_norm(encoder_output)
         hidden_output = self.dropout(self.act_fun(self.hidden_MLP(encoder_output_norm)))
         
         return self.classifier(hidden_output)

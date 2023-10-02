@@ -18,4 +18,4 @@ class Hparams:
     
     ## model params
     hidden_dim: int = 512 
-    dropout: float = 0.6 # dropout value
+    dropout: float = 0.1 # dropout value
