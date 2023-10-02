@@ -40,19 +40,6 @@ def filter_sentences(train_sentences, train_senses, min_sent_length=5, max_sent_
 
 ########################################################################################################################                
 
-## MAPPING BETWEEN INPUT WORD INDEX AND BERT EMBEDDING INDECES
-## (needed after the encoding part to combine the embeddings relative to the same input token!)
-def token2emb_idx(sense_idx, word_ids):
-    ris = []
-    i = 0
-    for word_id in word_ids:
-        if ris != [] and word_id != sense_idx: # to make it more efficient
-            break
-        if word_id==sense_idx:
-            ris.append(i)
-        i+=1       
-    return ris
-
 # utility function for reading the dataset
 def read_dataset(path):
     sentences_list, senses_list = [], []
@@ -88,6 +75,11 @@ def read_dataset(path):
     assert len(sentences_list) == len(senses_list)
     return sentences_list, senses_list
 
+# it deals with multi-label items and proceeds in this way:
+# it select as the only one gold label the one which appears first in the candidates set!
+def manipulate_labels(gold, candidates):
+    candidates = list(filter(lambda x: x in gold, candidates))
+    return candidates[0] # the first occurrence
 
 class WSD_Dataset(Dataset):
     def __init__(self, data_sentences, data_senses, coarse_sense2id_path, fine_sense2id_path):
@@ -103,6 +95,7 @@ class WSD_Dataset(Dataset):
             input_sentence = sentence
             current_data_senses = self.data_senses[i]
             sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
+            cluster_gold_list, cluster_candidates_list, fine_gold_list, fine_candidates_list = [], [], [], []
             for sense_idx in sense_idx_list:
                 # these below are all lists
                 cluster_gold = [self.coarse_sense2id[e] for e in current_data_senses["cluster_gold"][sense_idx]]
@@ -110,7 +103,14 @@ class WSD_Dataset(Dataset):
                 fine_gold = [self.fine_sense2id[e] for e in current_data_senses["fine_gold"][sense_idx]]
                 fine_candidates = [self.fine_sense2id[e] for e in current_data_senses["fine_candidates"][sense_idx]]
                 
-                self.data.append({"sense_idx" : int(sense_idx), "input": input_sentence, "cluster_gold" : cluster_gold, "cluster_candidates" : cluster_candidates, "fine_gold" : fine_gold, "fine_candidates" : fine_candidates})
+                cluster_gold = manipulate_labels(cluster_gold, cluster_candidates)
+                cluster_gold_list.append(cluster_gold) # list
+                cluster_candidates_list.append(cluster_candidates) # list of lists
+                fine_gold = manipulate_labels(fine_gold, fine_candidates)
+                fine_gold_list.append(fine_gold) # list
+                fine_candidates_list.appned(fine_candidates) # list of lists
+            # an item for each sentence
+            self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list})
             
     def __len__(self):
         return len(self.data)
@@ -177,13 +177,11 @@ class WSD_DataModule(pl.LightningDataModule):
     def collate(self, batch):
         batch_out = dict()
         tokenizer = BertTokenizerFast.from_pretrained("bert-large-cased")
-        # notice that I used FastTokenizers because they have 'word_ids()' method which I need for the token-embedddings mapping!
-        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt")
-        # we now map token idx to embedding indices (from sense_idx to sense_ids)
-        # sense_ids are simply the indeces of the tokens relative to the original word to disambiguate at index sense_idx...
-        batch_out["sense_ids"] = [token2emb_idx(batch[i]["sense_idx"], batch_out["inputs"].word_ids(i)) for i in range(len(batch))]
-        batch_out["cluster_gold"] = [sample["cluster_gold"] for sample in batch]
-        batch_out["cluster_candidates"] = [sample["cluster_candidates"] for sample in batch]
-        batch_out["fine_gold"] = [sample["fine_gold"] for sample in batch]
-        batch_out["fine_candidates"] = [sample["fine_candidates"] for sample in batch]
+        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt", is_split_into_words=True)
+        
+        batch_out["sense_ids"] = [sample["sense_ids"] for sample in batch] # list of lists of lists
+        batch_out["cluster_gold"] = [sample["cluster_gold_list"] for sample in batch] # list of lists
+        batch_out["cluster_candidates"] = [sample["cluster_candidates_list"] for sample in batch] # list of lists of lists
+        batch_out["fine_gold"] = [sample["fine_gold_list"] for sample in batch] # list of lists
+        batch_out["fine_candidates"] = [sample["fine_candidates_list"] for sample in batch] # list of lists of lists
         return batch_out

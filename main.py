@@ -52,14 +52,14 @@ def main(arguments):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         if arguments.type == "coarse" or arguments.type == "fine":
             ckpt = arguments.model
-            model = WSD_Model.load_from_checkpoint(ckpt, strict=False).to(device)
+            model = WSD_Model.load_from_checkpoint(ckpt).to(device)
             data = WSD_DataModule(model.hparams)
             data.setup()
             base_evaluation(model, data)
         
         elif arguments.type == "fine2cluster":
             ckpt = arguments.model
-            model = WSD_Model.load_from_checkpoint(ckpt, strict=False).to(device)
+            model = WSD_Model.load_from_checkpoint(ckpt).to(device)
             assert model.hparams.coarse_or_fine == "fine"
             data = WSD_DataModule(model.hparams)
             data.setup()
@@ -69,9 +69,9 @@ def main(arguments):
         elif arguments.type == "cluster_filter":
             ckpt1 = arguments.model
             ckpt2 = arguments.model2
-            coarse_model = WSD_Model.load_from_checkpoint(ckpt1, strict=False).to(device)
+            coarse_model = WSD_Model.load_from_checkpoint(ckpt1).to(device)
             assert coarse_model.hparams.coarse_or_fine == "coarse"
-            fine_model = WSD_Model.load_from_checkpoint(ckpt2, strict=False).to(device)
+            fine_model = WSD_Model.load_from_checkpoint(ckpt2).to(device)
             assert fine_model.hparams.coarse_or_fine == "fine"
             data = WSD_DataModule(coarse_model.hparams)
             data.setup()
