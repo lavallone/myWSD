@@ -45,7 +45,7 @@ def read_dataset(path):
     sentences_list, senses_list = [], []
     with open(path) as f:
         data = json.load(f)
-    for sentence_data in list(data.values()):#[:100]:
+    for sentence_data in list(data.values())[:100]:
         assert len(sentence_data["instance_ids"]) > 0
         assert len(sentence_data["words"]) == len(sentence_data["lemmas"]) == len(sentence_data["pos_tags"])
         sentence = " ".join(sentence_data["words"])
@@ -77,9 +77,31 @@ def read_dataset(path):
 
 # it deals with multi-label items and proceeds in this way:
 # it select as the only one gold label the one which appears first in the candidates set!
-def manipulate_labels(gold, candidates):
+def manipulate_labels_1(gold, candidates):
     candidates = list(filter(lambda x: x in gold, candidates))
     return candidates[0] # the first occurrence
+
+# it sets the right labels and indeed the -100 values to the tokenized sequence
+# phase needed to speed-up computation and to be used by CrossEntropy loss 
+def manipulate_labels_2(sense_ids_list, word_ids_list, labels_list):
+    labels = []
+    for i,word_ids in enumerate(word_ids_list):
+        labels_ids = []
+        for word_id in word_ids:
+            if word_id is None: # special tokens case
+                labels_ids.append(-100)
+            elif word_id in sense_ids_list[i]:
+                if word_id != previous_word_id:
+                    labels_ids.append(labels_list[i][sense_ids_list[i].index(word_id)])
+                else: # if the token is not the first one
+                    labels_ids.append(-100)
+            else: # if it's not a word to disambiguate
+                labels_ids.append(-100)
+            previous_word_id = word_id
+        labels.append(labels_ids)
+        
+    return labels # list of lists
+     
 
 class WSD_Dataset(Dataset):
     def __init__(self, data_sentences, data_senses, coarse_sense2id_path, fine_sense2id_path):
@@ -103,12 +125,12 @@ class WSD_Dataset(Dataset):
                 fine_gold = [self.fine_sense2id[e] for e in current_data_senses["fine_gold"][sense_idx]]
                 fine_candidates = [self.fine_sense2id[e] for e in current_data_senses["fine_candidates"][sense_idx]]
                 
-                cluster_gold = manipulate_labels(cluster_gold, cluster_candidates)
+                cluster_gold = manipulate_labels_1(cluster_gold, cluster_candidates)
                 cluster_gold_list.append(cluster_gold) # list
                 cluster_candidates_list.append(cluster_candidates) # list of lists
-                fine_gold = manipulate_labels(fine_gold, fine_candidates)
+                fine_gold = manipulate_labels_1(fine_gold, fine_candidates)
                 fine_gold_list.append(fine_gold) # list
-                fine_candidates_list.appned(fine_candidates) # list of lists
+                fine_candidates_list.append(fine_candidates) # list of lists
             # an item for each sentence
             self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list})
             
@@ -177,11 +199,13 @@ class WSD_DataModule(pl.LightningDataModule):
     def collate(self, batch):
         batch_out = dict()
         tokenizer = BertTokenizerFast.from_pretrained("bert-large-cased")
-        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt", is_split_into_words=True)
+        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt")
         
-        batch_out["sense_ids"] = [sample["sense_ids"] for sample in batch] # list of lists of lists
-        batch_out["cluster_gold"] = [sample["cluster_gold_list"] for sample in batch] # list of lists
+        sense_ids_list = [sample["sense_ids"] for sample in batch] # list of lists of lists
+        cluster_gold_list = [sample["cluster_gold_list"] for sample in batch] # list of lists
+        batch_out["cluster_gold"] = manipulate_labels_2(sense_ids_list, [batch_out["inputs"].word_ids(i) for i in range(len(batch))], cluster_gold_list)
         batch_out["cluster_candidates"] = [sample["cluster_candidates_list"] for sample in batch] # list of lists of lists
-        batch_out["fine_gold"] = [sample["fine_gold_list"] for sample in batch] # list of lists
+        fine_gold_list = [sample["fine_gold_list"] for sample in batch] # list of lists
+        batch_out["fine_gold"] = manipulate_labels_2(sense_ids_list, [batch_out["inputs"].word_ids(i) for i in range(len(batch))], fine_gold_list)
         batch_out["fine_candidates"] = [sample["fine_candidates_list"] for sample in batch] # list of lists of lists
         return batch_out
