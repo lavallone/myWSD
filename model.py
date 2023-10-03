@@ -32,6 +32,9 @@ class WSD_Model(pl.LightningModule):
         
         # validation ACCURACY
         self.accuracy = Accuracy(task="multiclass", num_classes=self.num_senses)
+        
+        # debug infos
+        self.debug = False
     
     def train(self, mode=True):
         super().train(mode)
@@ -59,8 +62,9 @@ class WSD_Model(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
-        labels = torch.tensor(labels).view(-1).to(self.device)
         outputs = self(batch)
+        labels = torch.tensor(labels).view(-1).to(self.device)
+        
         cross_entropy_loss = nn.CrossEntropyLoss()
         loss = cross_entropy_loss(outputs, labels)
         self.log_dict({"loss" : loss})
@@ -69,57 +73,57 @@ class WSD_Model(pl.LightningModule):
         return {'loss': loss}
 
     def predict(self, batch, filter_ids, labels):
-        
         with torch.no_grad():
             outputs = self(batch)
-            print(outputs.shape)
+            outputs = outputs.cpu().detach()
             # we first need to filter-out the outputs relative to the labels != -100 (the one we are interested in)
-            print(labels.shape)
+            labels = torch.tensor(labels)
             mask = labels!=-100
-            labels_of_interest = labels[mask]
-            print(labels_of_interest.shape)
-            filter_outputs = torch.index_select(outputs, 0, torch.tensor(labels_of_interest).to(self.device))
-            print(filter_outputs.shape)
-            print(filter_ids)
+            labels = labels[mask]
+            labels_filter = mask.nonzero().view(-1)
+            filter_outputs = torch.index_select(outputs, 0, labels_filter)
+            # we also need to modify this list of lists of lists and flatten it to make it a list of lists!
             filter_ids = [l for item in filter_ids for l in item]
-            print(filter_ids)
-            assert len(filter_ids) == len(filter_outputs)
             ris = []
             for i in range(len(filter_outputs)):
-                # predict only over the possible homonym clusters...
-                candidates_pred = torch.index_select(filter_outputs[i], 0, torch.tensor(filter_ids[i]).to(self.device))
+                # predict only over the possible candidates
+                filter_ids_i = torch.tensor(filter_ids[i])
+                candidates_pred = torch.index_select(filter_outputs[i], 0, filter_ids_i)
                 best_prediction = torch.argmax(candidates_pred, dim=0)
-                ris.append(filter_ids[i][best_prediction.item()])
-            return ris, labels_of_interest # list of predicted senses (expressed in indices)
+                ris.append(filter_ids_i[best_prediction.item()])
+            return torch.tensor(ris), labels
     
     def validation_step(self, batch, batch_idx):
         labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
-        labels = torch.tensor(labels).view(-1)
         outputs = self(batch)
+        labels = torch.tensor(labels).view(-1).to(self.device)
         # LOSS
-        val_loss = nn.CrossEntropyLoss(outputs, labels)
+        cross_entropy_loss = nn.CrossEntropyLoss()
+        val_loss = cross_entropy_loss(outputs, labels)
         self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.hparams.batch_size)
         # ACCURACY
         filter_ids = batch["cluster_candidates"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
-        preds, labels_of_interest = self.predict(batch, filter_ids, labels)
-        
-        # DEBUG info for one random item of the batch
-        # item_idx = random.randint(0, len(labels)-1)
-        # candidates = [self.id2sense[str(e)] for e in filter_ids[item_idx]]
-        # gold = [self.id2sense[str(e)] for e in labels[item_idx]]
-        # pred = [self.id2sense[str(preds[item_idx])]]
-        # debug_infos = {"debug_infos" : str(candidates) + " | " + str(gold) + " | " + str(pred)}
-        
-        assert len(preds) == labels_of_interest.shape[0]
-        self.accuracy.update(torch.tensor(preds), labels_of_interest)
+        labels = labels.cpu().detach().tolist()
+        preds, labels = self.predict(batch, filter_ids, labels) # 'preds' and 'labels' both tensors
+        assert preds.shape[0] == labels.shape[0]
+        self.accuracy.update(preds, labels)
         self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.hparams.batch_size)
         
-        #return debug_infos
+        # DEBUG info for one random item of the batch
+        if self.debug:
+            idx = random.randint(0, labels.shape[0]-1)
+            filter_ids = [l for item in filter_ids for l in item]
+            candidates = [self.id2sense[str(e)] for e in filter_ids[idx]]
+            gold = self.id2sense[str(labels[idx].item())]
+            pred = self.id2sense[str(preds[idx].item())]
+            debug_infos = {"debug_infos" : str(candidates) + " | " + str(gold) + " | " + str(pred)}
+            return debug_infos
     
     # at the end of the epoch, we log the DEBUG infos of each batch
-    # def validation_epoch_end(self, outputs):
-    #     c = [str(i+1) for i in range(len(outputs))]
-    #     data = []
-    #     for i in range(len(outputs)):
-    #         data.append(outputs[i]["debug_infos"])
-    #     self.logger.experiment.log({f"debug_infos_{self.current_epoch}": wandb.Table(columns=c, data=[data])})
+    def validation_epoch_end(self, outputs):
+        if self.debug:
+            c = [str(i+1) for i in range(len(outputs))]
+            data = []
+            for i in range(len(outputs)):
+                data.append(outputs[i]["debug_infos"])
+            self.logger.experiment.log({f"debug_infos_{self.current_epoch}": wandb.Table(columns=c, data=[data])})

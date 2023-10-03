@@ -38,7 +38,7 @@ def main(arguments):
         wandb.login() # this is the key to paste each time for login: 65a23b5182ca8ce3eb72530af592cf3bfa19de85
 
         version_name = arguments.type
-        with wandb.init(entity="lavallone", project="homonyms", name=version_name, mode="offline"):
+        with wandb.init(entity="lavallone", project="homonyms", name=version_name, mode="online"):
             hparams = asdict(Hparams())
             data = WSD_DataModule(hparams)
             model = WSD_Model(hparams)
