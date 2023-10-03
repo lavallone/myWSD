@@ -200,6 +200,8 @@ class WSD_DataModule(pl.LightningDataModule):
         batch_out = dict()
         tokenizer = BertTokenizerFast.from_pretrained("bert-large-cased")
         batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt")
+        # to check if no sequence is being truncated
+        assert len(batch_out["inputs"]["input_ids"]) < 1024
         
         sense_ids_list = [sample["sense_ids"] for sample in batch] # list of lists of lists
         cluster_gold_list = [sample["cluster_gold_list"] for sample in batch] # list of lists
