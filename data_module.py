@@ -48,8 +48,7 @@ def read_dataset(path):
     for sentence_data in list(data.values()):#[:100]:
         assert len(sentence_data["instance_ids"]) > 0
         assert len(sentence_data["words"]) == len(sentence_data["lemmas"]) == len(sentence_data["pos_tags"])
-        sentence = " ".join(sentence_data["words"])
-        sentences_list.append(sentence)
+        sentences_list.append(sentence_data["words"])
         
         assert (len(sentence_data["instance_ids"]) ==
                 len(sentence_data["gold_clusters"]) ==
@@ -114,7 +113,7 @@ class WSD_Dataset(Dataset):
     
     def make_data(self):
         for i, sentence in enumerate(self.data_sentences):
-            input_sentence = sentence
+            input_sentence = sentence # list of tokens
             current_data_senses = self.data_senses[i]
             sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
             cluster_gold_list, cluster_candidates_list, fine_gold_list, fine_candidates_list = [], [], [], []
@@ -199,7 +198,7 @@ class WSD_DataModule(pl.LightningDataModule):
     def collate(self, batch):
         batch_out = dict()
         tokenizer = BertTokenizerFast.from_pretrained("bert-large-cased")
-        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt")
+        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt", is_split_into_words=True)
         # to check if no sequence is being truncated
         assert len(batch_out["inputs"]["input_ids"]) < 1024
         
