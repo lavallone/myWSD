@@ -75,13 +75,13 @@ def read_dataset(path):
     assert len(sentences_list) == len(senses_list)
     return sentences_list, senses_list
 
-# it deals with multi-label items and proceeds in this way:
+# function deals with multi-label items and proceeds in this way:
 # it select as the only one gold label the one which appears first in the candidates set!
 def manipulate_labels_1(gold, candidates):
     candidates = list(filter(lambda x: x in gold, candidates))
     return candidates[0] # the first occurrence
 
-# it sets the right labels and indeed the -100 values to the tokenized sequence
+# function sets the right labels and indeed the -100 values to the tokenized sequence
 # phase needed to speed-up computation and to be used by CrossEntropy loss 
 def manipulate_labels_2(sense_ids_list, word_ids_list, labels_list):
     labels = []

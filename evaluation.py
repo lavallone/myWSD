@@ -2,12 +2,12 @@ import json
 from tqdm import tqdm
 import torch
 
+# compute accuracy
 def test_accuracy(preds, labels):
     tot_n = preds.shape[0]
     correct_n = torch.sum((preds==labels)).item()
     return correct_n/tot_n
 
-# TO RE-DO!!!!
 # using a fine model, predict the homonym cluster of the word
 def fine2cluster_evaluation(model, data):
     cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
@@ -15,17 +15,21 @@ def fine2cluster_evaluation(model, data):
     cluster_id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r"))
     model.eval()
     with torch.no_grad():
-        preds_list, labels_list = torch.tensor([]), torch.tensor([])
+        preds_list, labels_list = [], []
         for batch in tqdm(data.test_dataloader()):
-            coarse_preds = torch.tensor([])
-            coarse_labels = batch["cluster_gold"]
-            coarse_labels = coarse_labels.cpu().detach()
             # we first predict fine senses
             fine_labels = batch["fine_gold"]
-            fine_labels = fine_labels.cpu().detach()
-            fine_preds, fine_labels = model.predict(batch, batch["fine_candidates"], fine_labels)
+            fine_labels = [label for l in fine_labels for label in l]
+            fine_candidates = batch["fine_candidates"]
+            fine_candidates = [l for item in fine_candidates for l in item]
+            fine_preds, _ = model.predict(batch, fine_candidates, fine_labels)
+            # we prepare fine_preds and cluster_candidates...
+            fine_preds = fine_preds.tolist()
+            fine_preds = [e for l in fine_preds for e in l] # we have in only list all the preddictions of all items in a single batch
+            cluster_candidates_list = [e for l in batch["cluster_candidates"] for e in l]
             # and then we find the correspondent 'homonym cluster'
-            for fine_pred, cluster_candidates in zip(fine_preds, batch["cluster_candidates"]):
+            coarse_preds = [] # to be filled
+            for fine_pred, cluster_candidates in zip(fine_preds, cluster_candidates_list):
                 cluster_found = False
                 for cluster_candidate in cluster_candidates:
                     if cluster_found == True: break
@@ -36,8 +40,11 @@ def fine2cluster_evaluation(model, data):
                         if fine_id2sense[str(fine_pred)] == fine_sense[0]: # because fine_sense[1] is the gloss of the fine sense
                             coarse_preds.append(cluster_candidate)
                             cluster_found = True
-            # to handle the multi-label setting and being able to use Accuracy later...
-            coarse_labels = model.manipulate_labels(coarse_labels, coarse_preds)
+            # we prepare coarse labels
+            coarse_labels = torch.tensor(batch["cluster_gold"])
+            mask = coarse_labels!=-100
+            coarse_labels = coarse_labels[mask]
+            coarse_labels = coarse_labels.tolist() # already flattened
             assert len(coarse_preds) == len(coarse_labels)
         
             preds_list += coarse_preds
@@ -45,11 +52,20 @@ def fine2cluster_evaluation(model, data):
         
         assert len(preds_list) == len(labels_list)
         print(f"\nOn a total of {len(preds_list)} samples...")
-        ris_accuracy = test_accuracy(torch.tensor(preds_list), torch.tensor(labels_list)).item()
+        ris_accuracy = test_accuracy(torch.tensor(preds_list), torch.tensor(labels_list))
         print()
-        print(f"| Accuracy Score for test set:  {round(ris_accuracy,4)} |")
+        print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
 
-# TO RE-DO!!!!   
+preds_list, labels_list = torch.tensor([]), torch.tensor([])
+        for batch in tqdm(data.test_dataloader()):
+            labels = batch["cluster_gold"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
+            labels = [label for l in labels for label in l]
+            candidates = batch["cluster_candidates"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
+            preds, labels = model.predict(batch, candidates, labels)
+            assert preds.shape[0] == labels.shape[0]
+            preds_list = torch.cat((preds_list, preds))
+            labels_list = torch.cat((labels_list, labels))
+
 # using a coarse-model to filter-out the set of possible fine sense predictions
 def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=False):
     cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
@@ -58,17 +74,19 @@ def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=Fals
     fine_model.eval()
     coarse_model.eval()
     with torch.no_grad():
-        preds_list, labels_list = [], []
+        preds_list, labels_list = torch.tensor([]), torch.tensor([])
         for batch in tqdm(data.test_dataloader()):
-            # we save fine gold labels
-            fine_labels = batch["fine_gold"]
             if oracle_or_not == True: # if there's an oracle which tells us the correct homonym cluster...
-                coarse_gold_list = batch["cluster_gold"]
-                # we took the decision to take into account the first right cluster (if there are more than one gold clusters)
-                coarse_preds = [e[0] for e in coarse_gold_list]
+                coarse_preds = batch["cluster_gold"]
+                coarse_preds = [e for l in coarse_labels for e in l] # we flatten it
             else:
                 # we make cluster predictions
-                coarse_preds = coarse_model.predict(batch, batch["cluster_candidates"])
+                coarse_labels = batch["cluster_gold"]
+                coarse_labels = [label for l in coarse_labels for label in l]
+                cluster_candidates = batch["cluster_candidates"]
+                cluster_candidates = [l for item in cluster_candidates for l in item]
+                coarse_preds, _ = coarse_model.predict(batch, cluster_candidates, coarse_labels)
+                coarse_preds = coarse_preds.tolist()
             
             # we now need the list of the fine senses within each predicted cluster
             filtered_fine_senses_list = []
@@ -77,20 +95,20 @@ def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=Fals
                 filtered_fine_senses = [ int(fine_sense2id[fine_sense[0]]) for fine_sense in cluster2fine_map[cluster_id2sense[str(pred_cluster)]] ]
                 filtered_fine_senses_list.append(filtered_fine_senses)
             
-            # we finally predict fine senses using the list just computed... 
-            fine_preds = fine_model.predict(batch, filtered_fine_senses_list)
-            # manipulation of labels because of their multi-label nature
-            fine_labels = fine_model.manipulate_labels(fine_labels, fine_preds)
-            assert len(fine_labels) == len(fine_preds)
+            # we finally predict fine senses using the list just computed...
+            fine_labels = batch["fine_gold"]
+            fine_labels = [label for l in fine_labels for label in l] 
+            fine_preds, fine_labels = fine_model.predict(batch, filtered_fine_senses_list, fine_labels)
+            assert fine_labels.shape[0] == fine_preds.shape[0]
         
-            preds_list += fine_preds
-            labels_list += fine_labels
+            preds_list = torch.cat((preds_list, fine_preds))
+            labels_list = torch.cat((labels_list, fine_labels))
         
-        assert len(preds_list) == len(labels_list)
-        print(f"\nOn a total of {len(preds_list)} samples...")
-        ris_accuracy = test_accuracy(torch.tensor(preds_list), torch.tensor(labels_list)).item()
+        assert labels_list.shape[0] == preds_list.shape[0]
+        print(f"\nOn a total of {preds_list.shape[0]} samples...")
+        ris_accuracy = test_accuracy(preds_list, labels_list)
         print()
-        print(f"| Accuracy Score for test set:  {round(ris_accuracy,4)} |")
+        print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
         
         
 def base_evaluation(model, data):
@@ -98,16 +116,17 @@ def base_evaluation(model, data):
     with torch.no_grad():
         preds_list, labels_list = torch.tensor([]), torch.tensor([])
         for batch in tqdm(data.test_dataloader()):
-            labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
+            labels = batch["cluster_gold"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
             labels = [label for l in labels for label in l]
             candidates = batch["cluster_candidates"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
+            candidates = [l for item in candidates for l in item]
             preds, labels = model.predict(batch, candidates, labels)
             assert preds.shape[0] == labels.shape[0]
             preds_list = torch.cat((preds_list, preds))
             labels_list = torch.cat((labels_list, labels))
         
         assert preds_list.shape[0] == labels_list.shape[0]
-        print(f"\nOn a total of {len(preds_list.shape[0])} samples...")
+        print(f"\nOn a total of {preds_list.shape[0]} samples...")
         ris_accuracy = test_accuracy(preds_list, labels_list)
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")

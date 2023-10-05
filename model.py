@@ -7,6 +7,7 @@ from torchmetrics import Accuracy
 import json
 import wandb
 import random
+from evaluation import test_accuracy
 
 class WSD_Model(pl.LightningModule):
     def __init__(self, hparams):
@@ -29,9 +30,6 @@ class WSD_Model(pl.LightningModule):
         
         # mapping from 'id' to name of the 'sense'
         self.id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data/mapping/fine_id2sense.json", "r"))
-        
-        # validation ACCURACY
-        self.accuracy = Accuracy(task="multiclass", num_classes=self.num_senses)
         
         # debug infos
         self.debug = False
@@ -63,27 +61,23 @@ class WSD_Model(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
         outputs = self(batch)
-        labels = torch.tensor(labels).view(-1).to(self.device)
+        labels = torch.tensor(labels).view(-1) # (batch*seq_len)
         
         cross_entropy_loss = nn.CrossEntropyLoss()
-        loss = cross_entropy_loss(outputs, labels)
+        loss = cross_entropy_loss(outputs.to("cpu"), labels)
         self.log_dict({"loss" : loss})
-        # since we only monitor the loss for the training phase, we don't need to write additional 
-        # code in the 'training_epoch_end' function!
         return {'loss': loss}
 
     def predict(self, batch, filter_ids, labels):
         with torch.no_grad():
             outputs = self(batch)
-            outputs = outputs.cpu().detach()
+            outputs = outputs.cpu().detach() # we don't need to compute gradient
             # we first need to filter-out the outputs relative to the labels != -100 (the one we are interested in)
             labels = torch.tensor(labels)
             mask = labels!=-100
             labels = labels[mask]
-            labels_filter = mask.nonzero().view(-1)
+            labels_filter = mask.nonzero().view(-1) # returns the indeces to keep
             filter_outputs = torch.index_select(outputs, 0, labels_filter)
-            # we also need to modify this list of lists of lists and flatten it to make it a list of lists!
-            filter_ids = [l for item in filter_ids for l in item]
             ris = []
             for i in range(len(filter_outputs)):
                 # predict only over the possible candidates
@@ -96,18 +90,19 @@ class WSD_Model(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
         outputs = self(batch)
-        labels = torch.tensor(labels).view(-1).to(self.device)
+        labels = torch.tensor(labels).view(-1)
         # LOSS
         cross_entropy_loss = nn.CrossEntropyLoss()
-        val_loss = cross_entropy_loss(outputs, labels)
+        val_loss = cross_entropy_loss(outputs.to("cpu"), labels)
         self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.hparams.batch_size)
         # ACCURACY
         filter_ids = batch["cluster_candidates"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
-        labels = labels.cpu().detach().tolist()
-        preds, labels = self.predict(batch, filter_ids, labels) # 'preds' and 'labels' both tensors
+        filter_ids = [l for item in filter_ids for l in item] # flattening
+        labels = labels.tolist()
+        preds, labels = self.predict(batch, filter_ids, labels) # output 'preds' and 'labels' both tensors
         assert preds.shape[0] == labels.shape[0]
-        self.accuracy.update(preds, labels)
-        self.log("val_accuracy", self.accuracy, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.hparams.batch_size)
+        val_accuracy = test_accuracy(preds, labels)
+        return {"val_accuracy": val_accuracy}
         
         # DEBUG info for one random item of the batch
         if self.debug:
@@ -116,11 +111,15 @@ class WSD_Model(pl.LightningModule):
             candidates = [self.id2sense[str(e)] for e in filter_ids[idx]]
             gold = self.id2sense[str(labels[idx].item())]
             pred = self.id2sense[str(preds[idx].item())]
-            debug_infos = {"debug_infos" : str(candidates) + " | " + str(gold) + " | " + str(pred)}
-            return debug_infos
+            debug_infos = str(candidates) + " | " + str(gold) + " | " + str(pred)
+            return {"val_accuracy": val_accuracy, "debug_infos" : debug_infos}
     
     # at the end of the epoch, we log the DEBUG infos of each batch
     def validation_epoch_end(self, outputs):
+        # log average validation accuracy
+        avg_val_accuracy = torch.stack([x["val_accuracy"] for x in outputs]).mean()
+        self.log("val_accuracy", avg_val_accuracy)
+        
         if self.debug:
             c = [str(i+1) for i in range(len(outputs))]
             data = []

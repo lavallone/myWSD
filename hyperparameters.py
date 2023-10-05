@@ -8,7 +8,7 @@ class Hparams:
     data_train: str = "data/wsd_datasets/training_sets/mapped_semcor.json" # train dataset path
     data_val: str = "data/wsd_datasets/evaluation_sets/mapped_semeval2007.json" # validation dataset path
     data_test: str = "data/wsd_datasets/evaluation_sets/mapped_ALLamended.json" # test dataset path
-    batch_size: int = 8 # size of the batches
+    batch_size: int = 16 # size of the batches
     n_cpu: int = 8 # number of cpu threads to use for the dataloaders
     pin_memory: bool = False # parameter to pin memory in dataloader
     
@@ -18,4 +18,4 @@ class Hparams:
     
     ## model params
     hidden_dim: int = 512 
-    dropout: float = 0.1 # dropout value
+    dropout: float = 0.1 # dropout value (too low)
