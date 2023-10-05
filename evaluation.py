@@ -56,16 +56,6 @@ def fine2cluster_evaluation(model, data):
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
 
-preds_list, labels_list = torch.tensor([]), torch.tensor([])
-        for batch in tqdm(data.test_dataloader()):
-            labels = batch["cluster_gold"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
-            labels = [label for l in labels for label in l]
-            candidates = batch["cluster_candidates"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
-            preds, labels = model.predict(batch, candidates, labels)
-            assert preds.shape[0] == labels.shape[0]
-            preds_list = torch.cat((preds_list, preds))
-            labels_list = torch.cat((labels_list, labels))
-
 # using a coarse-model to filter-out the set of possible fine sense predictions
 def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=False):
     cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
