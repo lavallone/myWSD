@@ -25,7 +25,6 @@ def fine2cluster_evaluation(model, data):
             fine_preds, _ = model.predict(batch, fine_candidates, fine_labels)
             # we prepare fine_preds and cluster_candidates...
             fine_preds = fine_preds.tolist()
-            fine_preds = [e for l in fine_preds for e in l] # we have in only list all the preddictions of all items in a single batch
             cluster_candidates_list = [e for l in batch["cluster_candidates"] for e in l]
             # and then we find the correspondent 'homonym cluster'
             coarse_preds = [] # to be filled
@@ -56,6 +55,7 @@ def fine2cluster_evaluation(model, data):
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
 
+# TO BE REVISED...
 # using a coarse-model to filter-out the set of possible fine sense predictions
 def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=False):
     cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
@@ -67,8 +67,10 @@ def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=Fals
         preds_list, labels_list = torch.tensor([]), torch.tensor([])
         for batch in tqdm(data.test_dataloader()):
             if oracle_or_not == True: # if there's an oracle which tells us the correct homonym cluster...
-                coarse_preds = batch["cluster_gold"]
-                coarse_preds = [e for l in coarse_labels for e in l] # we flatten it
+                coarse_preds = torch.tensor(batch["cluster_gold"])
+                mask = coarse_preds!=-100
+                coarse_preds = coarse_preds[mask]
+                coarse_preds = coarse_preds.tolist() # already flattened
             else:
                 # we make cluster predictions
                 coarse_labels = batch["cluster_gold"]

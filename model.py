@@ -117,8 +117,8 @@ class WSD_Model(pl.LightningModule):
     # at the end of the epoch, we log the DEBUG infos of each batch
     def validation_epoch_end(self, outputs):
         # log average validation accuracy
-        avg_val_accuracy = torch.stack([x["val_accuracy"] for x in outputs]).mean()
-        self.log("val_accuracy", avg_val_accuracy)
+        avg_val_accuracy = torch.tensor([x["val_accuracy"] for x in outputs]).mean()
+        self.log("val_accuracy", avg_val_accuracy.item())
         
         if self.debug:
             c = [str(i+1) for i in range(len(outputs))]
