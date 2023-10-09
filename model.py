@@ -30,9 +30,12 @@ class WSD_Model(pl.LightningModule):
         
         # mapping from 'id' to name of the 'sense'
         self.id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data/mapping/fine_id2sense.json", "r"))
-        
         # debug infos
         self.debug = False
+        # we need to set this field depending on wich batch we want to use (RAM GPU size issues)
+        self.gpu_or_cpu = "cpu" # "cuda" or "cpu"
+        # if the precision is set to 16 bit, the cross entropy should have GPU tensors!
+        assert self.hparams.precision==32 or self.gpu_or_cpu == "cuda"
     
     def train(self, mode=True):
         super().train(mode)
@@ -41,7 +44,7 @@ class WSD_Model(pl.LightningModule):
     def forward(self, batch):
         text = batch["inputs"]
         embed_text = self.encoder(text["input_ids"].to(self.device), attention_mask=text["attention_mask"].to(self.device), token_type_ids=text["token_type_ids"].to(self.device), output_hidden_states=True)
-        # I take the hidden representation of the last four layers of each token
+        # we take the hidden representation of the last four layers of each token
         #embed_text = torch.stack(embed_text.hidden_states[-4:], dim=0).sum(dim=0) # sum
         #embed_text = torch.stack(embed_text.hidden_states[-4:], dim=0).sum(dim=0) # mean
         embed_text = torch.cat(embed_text.hidden_states[-4:], dim=-1) # concatenation --> (batch, seq_len, 1024*4=4096)
@@ -61,10 +64,12 @@ class WSD_Model(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
         outputs = self(batch)
+        outputs = outputs.to(self.gpu_or_cpu)
         labels = torch.tensor(labels).view(-1) # (batch*seq_len)
+        labels = labels.to(self.gpu_or_cpu)
         
         cross_entropy_loss = nn.CrossEntropyLoss()
-        loss = cross_entropy_loss(outputs.to("cpu"), labels)
+        loss = cross_entropy_loss(outputs, labels)
         self.log_dict({"loss" : loss})
         return {'loss': loss}
 
@@ -90,10 +95,12 @@ class WSD_Model(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         labels = batch["cluster_gold"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
         outputs = self(batch)
+        outputs = outputs.to(self.gpu_or_cpu)
         labels = torch.tensor(labels).view(-1)
+        labels = labels.to(self.gpu_or_cpu)
         # LOSS
         cross_entropy_loss = nn.CrossEntropyLoss()
-        val_loss = cross_entropy_loss(outputs.to("cpu"), labels)
+        val_loss = cross_entropy_loss(outputs, labels)
         self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True, batch_size=self.hparams.batch_size)
         # ACCURACY
         filter_ids = batch["cluster_candidates"] if self.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
@@ -101,8 +108,8 @@ class WSD_Model(pl.LightningModule):
         labels = labels.tolist()
         preds, labels = self.predict(batch, filter_ids, labels) # output 'preds' and 'labels' both tensors
         assert preds.shape[0] == labels.shape[0]
-        val_accuracy = test_accuracy(preds, labels)
-        return {"val_accuracy": val_accuracy}
+        #val_accuracy = test_accuracy(preds, labels)
+        return {"preds": preds, "labels" : labels}
         
         # DEBUG info for one random item of the batch
         if self.debug:
@@ -112,13 +119,16 @@ class WSD_Model(pl.LightningModule):
             gold = self.id2sense[str(labels[idx].item())]
             pred = self.id2sense[str(preds[idx].item())]
             debug_infos = str(candidates) + " | " + str(gold) + " | " + str(pred)
-            return {"val_accuracy": val_accuracy, "debug_infos" : debug_infos}
+            return {"preds": preds, "labels" : labels, "debug_infos" : debug_infos}
     
     # at the end of the epoch, we log the DEBUG infos of each batch
     def validation_epoch_end(self, outputs):
         # log average validation accuracy
-        avg_val_accuracy = torch.tensor([x["val_accuracy"] for x in outputs]).mean()
-        self.log("val_accuracy", avg_val_accuracy.item())
+        preds = torch.cat([x["preds"] for x in outputs])
+        labels = torch.cat([x["labels"] for x in outputs])
+        assert preds.shape[0] == labels.shape[0]
+        val_accuracy = test_accuracy(preds, labels)
+        self.log("val_accuracy", val_accuracy)
         
         if self.debug:
             c = [str(i+1) for i in range(len(outputs))]

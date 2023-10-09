@@ -55,7 +55,6 @@ def fine2cluster_evaluation(model, data):
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
 
-# TO BE REVISED...
 # using a coarse-model to filter-out the set of possible fine sense predictions
 def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=False):
     cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
