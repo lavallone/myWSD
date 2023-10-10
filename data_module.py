@@ -146,7 +146,7 @@ class WSD_Dataset(Dataset):
                 cluster_gold_eval = cluster_gold # we need this list of lists for the evaluation (where we want to take into account multi-labels)
                 cluster_gold = manipulate_labels_1(cluster_gold, cluster_candidates)
                 cluster_gold_list.append(cluster_gold) # list
-                cluster_gold_eval_list.append(cluster_gold)
+                cluster_gold_eval_list.append(cluster_gold_eval)
                 cluster_candidates_list.append(cluster_candidates) # list of lists
                 fine_gold_eval = fine_gold # we need this list of lists for the evaluation
                 fine_gold = manipulate_labels_1(fine_gold, fine_candidates)
