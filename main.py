@@ -27,6 +27,7 @@ def parse_args():
     # experiments parameters
     parser.add_argument("--mode", type=str, default="train", help="train/eval", required=True)
     parser.add_argument("--type", type=str, default="coarse", help="coarse/fine/fine2cluster/cluster_filter", required=True)
+    parser.add_argument("--encoder", type=str, default="bert", help="encoder type", required=True)
     parser.add_argument("--model", type=str, default="checkpoints/coarse.ckpt", help="path to model", required=False)
     parser.add_argument("--model2", type=str, default="checkpoints/coarse.ckpt", help="path to second model", required=False)
     parser.add_argument("--oracle", type=str, default="False", help="use or not the oracle in the 'cluster_filter' scenario", required=False)
@@ -37,14 +38,15 @@ def main(arguments):
     if arguments.mode == "train":
         wandb.login() # this is the key to paste each time for login: 65a23b5182ca8ce3eb72530af592cf3bfa19de85
 
-        version_name = arguments.type
-        with wandb.init(entity="lavallone", project="homonyms", name=version_name, mode="online"):
+        version_name = arguments.type+"_"+arguments.encoder
+        with wandb.init(entity="lavallone", project="homonyms", name=version_name, mode="offline"):
             hparams = asdict(Hparams())
+            hparams["encoder"] = arguments.encoder
             data = WSD_DataModule(hparams)
             model = WSD_Model(hparams)
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model.to(device)
-            train_model(data, model, experiment_name=version_name, metric_to_monitor="val_accuracy", mode="max", epochs=100, precision=hparams["precision"])
+            train_model(data, model, experiment_name=version_name, metric_to_monitor="val_accuracy", mode="max", epochs=10, precision=hparams["precision"])
 
         wandb.finish()
     

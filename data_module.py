@@ -4,7 +4,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from torch.utils.data import DataLoader, Dataset
 import pytorch_lightning as pl
 import json
-from transformers import BertTokenizerFast
+from transformers import AutoTokenizer
+from transformers.utils import logging
+import warnings
+warnings.filterwarnings('ignore')
 
 ######################################### UTILITY PREPROCESSING FUNCTIONS ##############################################
 ## CLEAN TOKENS
@@ -45,31 +48,46 @@ def read_dataset(path):
     sentences_list, senses_list = [], []
     with open(path) as f:
         data = json.load(f)
-    for sentence_data in list(data.values()):
-        assert len(sentence_data["instance_ids"]) > 0
-        assert len(sentence_data["words"]) == len(sentence_data["lemmas"]) == len(sentence_data["pos_tags"])
-        sentences_list.append(sentence_data["words"])
+    for sentence_data in list(data.values())[:100]:
+        # old structure
+        if type(sentence_data["instance_ids"]) == dict:
+            assert len(sentence_data["instance_ids"]) > 0
+            assert len(sentence_data["words"]) == len(sentence_data["lemmas"]) == len(sentence_data["pos_tags"])
+            sentences_list.append(sentence_data["words"])
+            
+            assert (len(sentence_data["instance_ids"]) ==
+                    len(sentence_data["gold_clusters"]) ==
+                    len(sentence_data["candidate_clusters"]) ==
+                    len(sentence_data["senses"]) ==
+                    len(sentence_data["wn_candidates"])
+                    )
+            assert all(len(gt) > 0 for gt in sentence_data["gold_clusters"].values())
+            assert (all(gt_sense in candidates for gt_sense in gt)
+                for gt, candidates in zip(sentence_data["gold_clusters"].values(), sentence_data["candidate_clusters"].values()))
+            assert all(len(gt) > 0 for gt in sentence_data["senses"].values())
+            assert (all(gt_sense in candidates for gt_sense in gt)
+                    for gt, candidates in zip(sentence_data["senses"].values(), sentence_data["wn_candidates"].values()))
+            senses = {}
+            # COARSE
+            senses["cluster_gold"] = sentence_data["gold_clusters"]
+            senses["cluster_candidates"] = sentence_data["candidate_clusters"]
+            # FINE
+            senses["fine_gold"] = sentence_data["senses"]
+            senses["fine_candidates"] = sentence_data["wn_candidates"]
+            senses_list.append(senses)
         
-        assert (len(sentence_data["instance_ids"]) ==
-                len(sentence_data["gold_clusters"]) ==
-                len(sentence_data["candidate_clusters"]) ==
-                len(sentence_data["senses"]) ==
-                len(sentence_data["wn_candidates"])
-                )
-        assert all(len(gt) > 0 for gt in sentence_data["gold_clusters"].values())
-        assert (all(gt_sense in candidates for gt_sense in gt)
-            for gt, candidates in zip(sentence_data["gold_clusters"].values(), sentence_data["candidate_clusters"].values()))
-        assert all(len(gt) > 0 for gt in sentence_data["senses"].values())
-        assert (all(gt_sense in candidates for gt_sense in gt)
-                for gt, candidates in zip(sentence_data["senses"].values(), sentence_data["wn_candidates"].values()))
-        senses = {}
-        # COARSE
-        senses["cluster_gold"] = sentence_data["gold_clusters"]
-        senses["cluster_candidates"] = sentence_data["candidate_clusters"]
-        # FINE
-        senses["fine_gold"] = sentence_data["senses"]
-        senses["fine_candidates"] = sentence_data["wn_candidates"]
-        senses_list.append(senses)
+        else: # new data structure
+            sentences_list.append(sentence_data["example_tokens"])
+            
+            senses = {}
+            sense_idx = str(sentence_data["instance_ids"][0])
+            # COARSE
+            senses["cluster_gold"] = {sense_idx : [sentence_data["cluster_name"]]}
+            senses["cluster_candidates"] = {sense_idx : sentence_data["candidate_clusters"]}
+            # FINE
+            senses["fine_gold"] = {sense_idx : [sentence_data["synset_name"]]}
+            senses["fine_candidates"] = {sense_idx : sentence_data["wn_candidates"]}
+            senses_list.append(senses)
         
     assert len(sentences_list) == len(senses_list)
     return sentences_list, senses_list
@@ -117,6 +135,7 @@ class WSD_Dataset(Dataset):
             current_data_senses = self.data_senses[i]
             sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
             cluster_gold_list, cluster_candidates_list, fine_gold_list, fine_candidates_list = [], [], [], []
+            cluster_gold_eval_list, fine_gold_eval_list = [], []
             for sense_idx in sense_idx_list:
                 # these below are all lists
                 cluster_gold = [self.coarse_sense2id[e] for e in current_data_senses["cluster_gold"][sense_idx]]
@@ -124,14 +143,19 @@ class WSD_Dataset(Dataset):
                 fine_gold = [self.fine_sense2id[e] for e in current_data_senses["fine_gold"][sense_idx]]
                 fine_candidates = [self.fine_sense2id[e] for e in current_data_senses["fine_candidates"][sense_idx]]
                 
+                cluster_gold_eval = cluster_gold # we need this list of lists for the evaluation (where we want to take into account multi-labels)
                 cluster_gold = manipulate_labels_1(cluster_gold, cluster_candidates)
                 cluster_gold_list.append(cluster_gold) # list
+                cluster_gold_eval_list.append(cluster_gold)
                 cluster_candidates_list.append(cluster_candidates) # list of lists
+                fine_gold_eval = fine_gold # we need this list of lists for the evaluation
                 fine_gold = manipulate_labels_1(fine_gold, fine_candidates)
                 fine_gold_list.append(fine_gold) # list
+                fine_gold_eval_list.append(fine_gold_eval)
                 fine_candidates_list.append(fine_candidates) # list of lists
             # an item for each sentence
-            self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list})
+            self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list,
+                              "cluster_gold_eval_list" : cluster_gold_eval_list, "fine_gold_eval_list" : fine_gold_eval_list})
             
     def __len__(self):
         return len(self.data)
@@ -153,13 +177,13 @@ class WSD_DataModule(pl.LightningDataModule):
         # TRAIN
         #clean_tokens(self.train_sentences)
         #self.train_sentences, self.train_senses = filter_sentences(self.train_sentences, self.train_senses)
-        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
+        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data_v3/mapping/cluster_sense2id.json", fine_sense2id_path="data_v3/mapping/fine_sense2id.json")
         # VAL
         #clean_tokens(self.val_sentences)
-        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
+        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data_v3/mapping/cluster_sense2id.json", fine_sense2id_path="data_v3/mapping/fine_sense2id.json")
         # TEST
         #clean_tokens(self.test_sentences)
-        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
+        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data_v3/mapping/cluster_sense2id.json", fine_sense2id_path="data_v3/mapping/fine_sense2id.json")
 
     def train_dataloader(self):
         return DataLoader(
@@ -197,16 +221,24 @@ class WSD_DataModule(pl.LightningDataModule):
     # for efficiency reasons, each time we pick a batch from the dataloader, we call this function!
     def collate(self, batch):
         batch_out = dict()
-        tokenizer = BertTokenizerFast.from_pretrained("bert-large-cased")
+        if self.hparams.encoder == "bert": tokenizer = AutoTokenizer.from_pretrained("bert-large-cased")
+        elif self.hparams.encoder == "roberta": tokenizer = AutoTokenizer.from_pretrained("roberta-large", add_prefix_space=True)
+        elif self.hparams.encoder == "deberta": 
+            tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large")
+            logging.set_verbosity(40) # to avoid warnings
+        elif self.hparams.encoder == "electra": tokenizer = AutoTokenizer.from_pretrained("google/electra-large-discriminator")
+        
         batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt", is_split_into_words=True)
         # to check if no sequence is being truncated
-        assert len(batch_out["inputs"]["input_ids"]) < 1024
+        assert len(batch_out["inputs"]["input_ids"]) < 512
         
         sense_ids_list = [sample["sense_ids"] for sample in batch] # list of lists of lists
         cluster_gold_list = [sample["cluster_gold_list"] for sample in batch] # list of lists
         batch_out["cluster_gold"] = manipulate_labels_2(sense_ids_list, [batch_out["inputs"].word_ids(i) for i in range(len(batch))], cluster_gold_list)
+        batch_out["cluster_gold_eval"] = [sample["cluster_gold_eval_list"] for sample in batch] # list of lists of lists
         batch_out["cluster_candidates"] = [sample["cluster_candidates_list"] for sample in batch] # list of lists of lists
         fine_gold_list = [sample["fine_gold_list"] for sample in batch] # list of lists
         batch_out["fine_gold"] = manipulate_labels_2(sense_ids_list, [batch_out["inputs"].word_ids(i) for i in range(len(batch))], fine_gold_list)
+        batch_out["fine_gold_eval"] = [sample["fine_gold_eval_list"] for sample in batch] # list of lists of lists
         batch_out["fine_candidates"] = [sample["fine_candidates_list"] for sample in batch] # list of lists of lists
         return batch_out

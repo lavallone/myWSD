@@ -22,7 +22,8 @@ def fine2cluster_evaluation(model, data):
             fine_labels = [label for l in fine_labels for label in l]
             fine_candidates = batch["fine_candidates"]
             fine_candidates = [l for item in fine_candidates for l in item]
-            fine_preds, _ = model.predict(batch, fine_candidates, fine_labels)
+            fine_labels_eval = batch["fine_gold_eval"]
+            fine_preds, _ = model.predict(batch, fine_candidates, fine_labels, fine_labels_eval)
             # we prepare fine_preds and cluster_candidates...
             fine_preds = fine_preds.tolist()
             cluster_candidates_list = [e for l in batch["cluster_candidates"] for e in l]
@@ -76,7 +77,8 @@ def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=Fals
                 coarse_labels = [label for l in coarse_labels for label in l]
                 cluster_candidates = batch["cluster_candidates"]
                 cluster_candidates = [l for item in cluster_candidates for l in item]
-                coarse_preds, _ = coarse_model.predict(batch, cluster_candidates, coarse_labels)
+                coarse_labels_eval = batch["cluster_gold_eval"]
+                coarse_preds, _ = coarse_model.predict(batch, cluster_candidates, coarse_labels, coarse_labels_eval)
                 coarse_preds = coarse_preds.tolist()
             
             # we now need the list of the fine senses within each predicted cluster
@@ -89,7 +91,8 @@ def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=Fals
             # we finally predict fine senses using the list just computed...
             fine_labels = batch["fine_gold"]
             fine_labels = [label for l in fine_labels for label in l] 
-            fine_preds, fine_labels = fine_model.predict(batch, filtered_fine_senses_list, fine_labels)
+            fine_labels_eval = batch["fine_gold_eval"]
+            fine_preds, fine_labels = fine_model.predict(batch, filtered_fine_senses_list, fine_labels, fine_labels_eval)
             assert fine_labels.shape[0] == fine_preds.shape[0]
         
             preds_list = torch.cat((preds_list, fine_preds))
@@ -111,7 +114,8 @@ def base_evaluation(model, data):
             labels = [label for l in labels for label in l]
             candidates = batch["cluster_candidates"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
             candidates = [l for item in candidates for l in item]
-            preds, labels = model.predict(batch, candidates, labels)
+            labels_eval = batch["cluster_gold_eval"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold_eval"]
+            preds, labels = model.predict(batch, candidates, labels, labels_eval)
             assert preds.shape[0] == labels.shape[0]
             preds_list = torch.cat((preds_list, preds))
             labels_list = torch.cat((labels_list, labels))
