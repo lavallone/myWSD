@@ -17,6 +17,6 @@ class Hparams:
     precision: int = 32 # 16 or 32 precision training
     
     ## model params
-    encoder: str = "electra" # bert, roberta, deberta, electra
+    encoder: str = "deberta" # bert, roberta, deberta, electra
     hidden_dim: int = 512 
     dropout: float = 0.1 # dropout value
