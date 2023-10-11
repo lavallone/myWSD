@@ -1,10 +1,10 @@
 import wandb
 from argparse import ArgumentParser
-from data_module import WSD_DataModule
-from hyperparameters import Hparams
-from train import train_model
-from model import WSD_Model
-from evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation
+from src.data_module import WSD_DataModule
+from src.hyperparameters import Hparams
+from src.train import train_model
+from src.model import WSD_Model
+from src.evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation
 
 import torch
 import random
