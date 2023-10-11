@@ -23,8 +23,9 @@ class WSD_Model(pl.LightningModule):
             param.requires_grad = False
         
         # classification HEAD
-        self.batch_norm = nn.BatchNorm1d(1024)
-        self.hidden_MLP = nn.Linear(1024, self.hparams.hidden_dim, bias=True)
+        n = 1 if self.hparams.last_hidden_state else 4
+        self.batch_norm = nn.BatchNorm1d(n*1024)
+        self.hidden_MLP = nn.Linear(n*1024, self.hparams.hidden_dim, bias=True)
         self.act_fun = nn.SiLU(inplace=True) # Swish activation function
         self.dropout = nn.Dropout(self.hparams.dropout)
         self.num_senses = 106553 if self.hparams.coarse_or_fine == "coarse" else 117659 # sense inventory
@@ -45,12 +46,13 @@ class WSD_Model(pl.LightningModule):
                
     def forward(self, batch):
         text = batch["inputs"]
-        embed_text = self.encoder(**text) # ["input_ids"].to(self.device), attention_mask=text["attention_mask"].to(self.device), token_type_ids=text["token_type_ids"].to(self.device), output_hidden_states=True)
-        # we take the hidden representation of the last four layers of each token
-        #embed_text = torch.stack(embed_text.hidden_states[-4:], dim=0).sum(dim=0) # sum
-        #embed_text = torch.stack(embed_text.hidden_states[-4:], dim=0).sum(dim=0) # mean
-        #embed_text = torch.cat(embed_text.hidden_states[-4:], dim=-1) # concatenation --> (batch, seq_len, 1024*4=4096)
-        embed_text = embed_text.last_hidden_state
+        # we take only the last hidden layer
+        if self.hparams.last_hidden_state:
+            embed_text = self.encoder(**text)
+            embed_text = embed_text.last_hidden_state
+        else: # we take the hidden representation of the last four layers of each token
+            embed_text = self.encoder(**text, output_hidden_states=True) # ["input_ids"].to(self.device), attention_mask=text["attention_mask"].to(self.device), token_type_ids=text["token_type_ids"].to(self.device), output_hidden_states=True)
+            embed_text = torch.cat(embed_text.hidden_states[-4:], dim=-1) # concatenation --> (batch, seq_len, 1024*4=4096)
         
         encoder_output = embed_text.view(-1, embed_text.shape[-1]) # flattened embeddings --> (batch*seq_len, 4096)
         encoder_output_norm = self.batch_norm(encoder_output)
