@@ -5,9 +5,9 @@ class Hparams:
     
     ## dataloader params
     coarse_or_fine: str = "coarse" # coarse-grained or fine-grained task
-    data_train: str = "data_v3/wsd_datasets/train.json" # train dataset path
-    data_val: str = "data_v3/wsd_datasets/dev.json" # validation dataset path
-    data_test: str = "data_v3/wsd_datasets/test.json" # test dataset path
+    data_train: str = "data/wsd_datasets/train.json" # train dataset path
+    data_val: str = "data/wsd_datasets/dev.json" # validation dataset path
+    data_test: str = "data/wsd_datasets/test.json" # test dataset path
     batch_size: int = 8 # size of the batches
     n_cpu: int = 8 # number of cpu threads to use for the dataloaders
     pin_memory: bool = False # parameter to pin memory in dataloader

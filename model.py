@@ -32,7 +32,7 @@ class WSD_Model(pl.LightningModule):
         self.classifier = nn.Linear(self.hparams.hidden_dim, self.num_senses, bias=False) # final linear projection with no bias
         
         # mapping from 'id' to name of the 'sense'
-        self.id2sense = json.load(open("data_v3/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data_v3/mapping/fine_id2sense.json", "r"))
+        self.id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data/mapping/fine_id2sense.json", "r"))
         # debug infos
         self.debug = False
         # we need to set this field depending on wich batch we want to use (RAM GPU size issues)

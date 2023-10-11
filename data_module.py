@@ -177,13 +177,13 @@ class WSD_DataModule(pl.LightningDataModule):
         # TRAIN
         #clean_tokens(self.train_sentences)
         #self.train_sentences, self.train_senses = filter_sentences(self.train_sentences, self.train_senses)
-        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data_v3/mapping/cluster_sense2id.json", fine_sense2id_path="data_v3/mapping/fine_sense2id.json")
+        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
         # VAL
         #clean_tokens(self.val_sentences)
-        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data_v3/mapping/cluster_sense2id.json", fine_sense2id_path="data_v3/mapping/fine_sense2id.json")
+        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
         # TEST
         #clean_tokens(self.test_sentences)
-        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data_v3/mapping/cluster_sense2id.json", fine_sense2id_path="data_v3/mapping/fine_sense2id.json")
+        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
 
     def train_dataloader(self):
         return DataLoader(
