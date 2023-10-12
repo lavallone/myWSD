@@ -52,10 +52,12 @@ def main(arguments):
     
     elif arguments.mode == "eval":
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        hparams = asdict(Hparams())
+        hparams["encoder"] = arguments.encoder
         if arguments.type == "coarse" or arguments.type == "fine":
             ckpt = arguments.model
             model = WSD_Model.load_from_checkpoint(ckpt).to(device)
-            data = WSD_DataModule(model.hparams)
+            data = WSD_DataModule(hparams)
             data.setup()
             base_evaluation(model, data)
         
@@ -63,7 +65,7 @@ def main(arguments):
             ckpt = arguments.model
             model = WSD_Model.load_from_checkpoint(ckpt).to(device)
             assert model.hparams.coarse_or_fine == "fine"
-            data = WSD_DataModule(model.hparams)
+            data = WSD_DataModule(hparams)
             data.setup()
             # evaluation on homonym clusters using a fine-grained model
             fine2cluster_evaluation(model, data)
@@ -75,7 +77,7 @@ def main(arguments):
             assert coarse_model.hparams.coarse_or_fine == "coarse"
             fine_model = WSD_Model.load_from_checkpoint(ckpt2).to(device)
             assert fine_model.hparams.coarse_or_fine == "fine"
-            data = WSD_DataModule(coarse_model.hparams)
+            data = WSD_DataModule(hparams)
             data.setup()
             # evaluation on fine senses using a coarse model for filtering out
             cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=bool(arguments.oracle))

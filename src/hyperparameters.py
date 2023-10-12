@@ -11,6 +11,7 @@ class Hparams:
     batch_size: int = 8 # size of the batches
     n_cpu: int = 8 # number of cpu threads to use for the dataloaders
     pin_memory: bool = False # parameter to pin memory in dataloader
+    cluster_candidates_filter: bool = True
     
     ## train params
     lr: float = 1e-4

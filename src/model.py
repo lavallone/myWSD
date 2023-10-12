@@ -6,7 +6,7 @@ from transformers import AutoModel
 import json
 import wandb
 import random
-from evaluation import test_accuracy
+from src.evaluation import test_accuracy
 
 class WSD_Model(pl.LightningModule):
     def __init__(self, hparams):
@@ -45,7 +45,7 @@ class WSD_Model(pl.LightningModule):
         self.encoder.eval()
                
     def forward(self, batch):
-        text = batch["inputs"]
+        text = batch["inputs"].to(self.device)
         # we take only the last hidden layer
         if self.hparams.last_hidden_state:
             embed_text = self.encoder(**text)

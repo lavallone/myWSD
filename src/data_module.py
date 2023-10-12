@@ -121,12 +121,13 @@ def manipulate_labels_2(sense_ids_list, word_ids_list, labels_list):
      
 
 class WSD_Dataset(Dataset):
-    def __init__(self, data_sentences, data_senses, coarse_sense2id_path, fine_sense2id_path):
+    def __init__(self, data_sentences, data_senses, coarse_sense2id_path, fine_sense2id_path, cluster_candidates_filter):
         self.data = list()
         self.data_sentences = data_sentences # list of input sentences
         self.data_senses = data_senses # list of dictionaries relative to each input sentence
         self.coarse_sense2id = json.load(open(coarse_sense2id_path, "r"))
         self.fine_sense2id = json.load(open(fine_sense2id_path, "r"))
+        self.cluster_candidates_filter = cluster_candidates_filter
         self.make_data()
     
     def make_data(self):
@@ -136,6 +137,7 @@ class WSD_Dataset(Dataset):
             sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
             cluster_gold_list, cluster_candidates_list, fine_gold_list, fine_candidates_list = [], [], [], []
             cluster_gold_eval_list, fine_gold_eval_list = [], []
+            filter_sense_idx_list = []
             for sense_idx in sense_idx_list:
                 # these below are all lists
                 cluster_gold = [self.coarse_sense2id[e] for e in current_data_senses["cluster_gold"][sense_idx]]
@@ -143,6 +145,11 @@ class WSD_Dataset(Dataset):
                 fine_gold = [self.fine_sense2id[e] for e in current_data_senses["fine_gold"][sense_idx]]
                 fine_candidates = [self.fine_sense2id[e] for e in current_data_senses["fine_candidates"][sense_idx]]
                 
+                # if the data filtering is ON and the sense has only ine cluster candidate, we skip it
+                if self.cluster_candidates_filter and len(cluster_candidates) == 1:
+                    continue
+                
+                filter_sense_idx_list.append(sense_idx)
                 cluster_gold_eval = cluster_gold # we need this list of lists for the evaluation (where we want to take into account multi-labels)
                 cluster_gold = manipulate_labels_1(cluster_gold, cluster_candidates)
                 cluster_gold_list.append(cluster_gold) # list
@@ -153,9 +160,12 @@ class WSD_Dataset(Dataset):
                 fine_gold_list.append(fine_gold) # list
                 fine_gold_eval_list.append(fine_gold_eval)
                 fine_candidates_list.append(fine_candidates) # list of lists
-            # an item for each sentence
-            self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list,
-                              "cluster_gold_eval_list" : cluster_gold_eval_list, "fine_gold_eval_list" : fine_gold_eval_list})
+            
+            # we append an itam only if the senetnce has at least one word to disambiguate
+            if len(cluster_candidates_list) != 0:
+                # an item for each sentence
+                self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in filter_sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list,
+                                "cluster_gold_eval_list" : cluster_gold_eval_list, "fine_gold_eval_list" : fine_gold_eval_list})
             
     def __len__(self):
         return len(self.data)
@@ -177,13 +187,13 @@ class WSD_DataModule(pl.LightningDataModule):
         # TRAIN
         #clean_tokens(self.train_sentences)
         #self.train_sentences, self.train_senses = filter_sentences(self.train_sentences, self.train_senses)
-        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
+        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
         # VAL
         #clean_tokens(self.val_sentences)
-        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
+        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
         # TEST
         #clean_tokens(self.test_sentences)
-        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json")
+        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
 
     def train_dataloader(self):
         return DataLoader(
