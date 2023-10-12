@@ -45,11 +45,11 @@ def filter_sentences(train_sentences, train_senses, min_sent_length=5, max_sent_
 
 # utility function for reading the dataset
 def read_dataset(path):
-    id_list, sentences_list, senses_list = [], []
+    sentence_id_list, sentences_list, senses_list = [], [], []
     with open(path) as f:
         data = json.load(f)
     for sentence_id, sentence_data in list(data.items()):#[:100]:
-        id_list.append(sentence_id)
+        sentence_id_list.append(sentence_id)
         # old structure
         if type(sentence_data["instance_ids"]) == dict:
             assert len(sentence_data["instance_ids"]) > 0
@@ -91,7 +91,7 @@ def read_dataset(path):
             senses_list.append(senses)
         
     assert len(sentences_list) == len(senses_list)
-    return id_list, sentences_list, senses_list
+    return sentence_id_list, sentences_list, senses_list
 
 # function deals with multi-label items and proceeds in this way:
 # it select as the only one gold label the one which appears first in the candidates set!
@@ -122,9 +122,8 @@ def manipulate_labels_2(sense_ids_list, word_ids_list, labels_list):
      
 
 class WSD_Dataset(Dataset):
-    def __init__(self, ids, data_sentences, data_senses, coarse_sense2id_path, fine_sense2id_path, cluster_candidates_filter):
+    def __init__(self, data_sentences, data_senses, coarse_sense2id_path, fine_sense2id_path, cluster_candidates_filter):
         self.data = list()
-        self.ids = ids
         self.data_sentences = data_sentences # list of input sentences
         self.data_senses = data_senses # list of dictionaries relative to each input sentence
         self.coarse_sense2id = json.load(open(coarse_sense2id_path, "r"))
@@ -166,7 +165,7 @@ class WSD_Dataset(Dataset):
             # we append an itam only if the senetnce has at least one word to disambiguate
             if len(cluster_candidates_list) != 0:
                 # an item for each sentence
-                self.data.append({"id" : self.ids[i], "sense_ids" : [int(sense_idx) for sense_idx in filter_sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list,
+                self.data.append({"sense_ids" : [int(sense_idx) for sense_idx in filter_sense_idx_list], "input": input_sentence, "cluster_gold_list" : cluster_gold_list, "cluster_candidates_list" : cluster_candidates_list, "fine_gold_list" : fine_gold_list, "fine_candidates_list" : fine_candidates_list,
                                 "cluster_gold_eval_list" : cluster_gold_eval_list, "fine_gold_eval_list" : fine_gold_eval_list})
             
     def __len__(self):
@@ -181,21 +180,21 @@ class WSD_DataModule(pl.LightningDataModule):
         super().__init__()
         self.save_hyperparameters(hparams, logger=False)
         
-        self.train_ids, self.train_sentences, self.train_senses = read_dataset(self.hparams.data_train)
-        self.val_ids, self.val_sentences, self.val_senses = read_dataset(self.hparams.data_val)
-        self.test_ids, self.test_sentences, self.test_senses = read_dataset(self.hparams.data_test)
+        _, self.train_sentences, self.train_senses = read_dataset(self.hparams.data_train)
+        _, self.val_sentences, self.val_senses = read_dataset(self.hparams.data_val)
+        _, self.test_sentences, self.test_senses = read_dataset(self.hparams.data_test)
 
     def setup(self, stage=None):
         # TRAIN
         #clean_tokens(self.train_sentences)
         #self.train_sentences, self.train_senses = filter_sentences(self.train_sentences, self.train_senses)
-        self.data_train = WSD_Dataset(ids=self.train_ids, data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
+        self.data_train = WSD_Dataset(data_sentences=self.train_sentences, data_senses=self.train_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
         # VAL
         #clean_tokens(self.val_sentences)
-        self.data_val = WSD_Dataset(ids=self.val_ids, data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
+        self.data_val = WSD_Dataset(data_sentences=self.val_sentences, data_senses=self.val_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
         # TEST
         #clean_tokens(self.test_sentences)
-        self.data_test = WSD_Dataset(ids=self.test_ids, data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
+        self.data_test = WSD_Dataset(data_sentences=self.test_sentences, data_senses=self.test_senses, coarse_sense2id_path="data/mapping/cluster_sense2id.json", fine_sense2id_path="data/mapping/fine_sense2id.json", cluster_candidates_filter=self.hparams.cluster_candidates_filter)
 
     def train_dataloader(self):
         return DataLoader(
@@ -233,7 +232,6 @@ class WSD_DataModule(pl.LightningDataModule):
     # for efficiency reasons, each time we pick a batch from the dataloader, we call this function!
     def collate(self, batch):
         batch_out = dict()
-        batch_out["ids"] = [sample["id"] for sample in batch] # unique sentence ids
         if self.hparams.encoder == "bert": tokenizer = AutoTokenizer.from_pretrained("bert-large-cased")
         elif self.hparams.encoder == "roberta": tokenizer = AutoTokenizer.from_pretrained("roberta-large", add_prefix_space=True)
         elif self.hparams.encoder == "deberta": 

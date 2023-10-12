@@ -2,6 +2,8 @@ import json
 from tqdm import tqdm
 import torch
 import csv
+import copy
+from src.data_module import read_dataset
 
 # compute accuracy
 def test_accuracy(preds, labels):
@@ -126,26 +128,29 @@ def base_evaluation(model, data):
         ris_accuracy = test_accuracy(preds_list, labels_list)
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
-        
-# LOGGING FUNCTIONS FOR QUALITATIVELY EVALUATE fine2cluster AND cluster_filter METHODS
+
+########################################################################################      
+# LOGGING FUNCTIONS FOR QUALITATIVELY EVALUATE fine2cluster AND cluster_filter METHODS #
+########################################################################################
 
 def log_fine2cluster(coarse_model, fine_model, data):
     
     coarse_csv_data_list = []
     fine2cluster_csv_data_list = []
     ids, sentences, senses = read_dataset(data.hparams.data_test)
-    for i, sentence in tqdm(enumerate(sentences)):
-        current_data_senses = self.data_senses[i]
+    for i, sentence in enumerate(sentences):
+        current_data_senses = senses[i]
         sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
         for sense_idx in sense_idx_list:
             coarse_csv_data = [None, None, None, None, None]
             fine2cluster_csv_data = [None, None, None, None, None, None]
             coarse_csv_data[0] = ids[0]
             fine2cluster_csv_data[0] = ids[0]
-            sentence[sense_idx] = "<<<" + sentence[sense_idx] + ">>>" # we hihglight the word to disambiguate
-            sentence = ' '.join(sentence) # from a  list of tokens to a string
-            coarse_csv_data[1] = sentence
-            fine2cluster_csv_data[1] = sentence
+            input_sentence = copy.deepcopy(sentence)
+            input_sentence[int(sense_idx)] = "<<<" + input_sentence[int(sense_idx)] + ">>>" # we hihglight the word to disambiguate
+            input_sentence = ' '.join(input_sentence) # from a  list of tokens to a string
+            coarse_csv_data[1] = input_sentence
+            fine2cluster_csv_data[1] = input_sentence
             # these below are all lists
             cluster_gold = [e for e in current_data_senses["cluster_gold"][sense_idx]]
             cluster_candidates = [e for e in current_data_senses["cluster_candidates"][sense_idx]]
@@ -154,7 +159,7 @@ def log_fine2cluster(coarse_model, fine_model, data):
             fine2cluster_csv_data[4] = cluster_gold
             fine2cluster_csv_data[5] = cluster_candidates
             # if the data filtering is ON and the sense has only one cluster candidate, we skip it
-            if self.cluster_candidates_filter and len(cluster_candidates) == 1:
+            if data.hparams.cluster_candidates_filter and len(cluster_candidates) == 1:
                 continue
             # otherwise we append
             coarse_csv_data_list.append(coarse_csv_data)
@@ -176,15 +181,15 @@ def log_fine2cluster(coarse_model, fine_model, data):
             candidates = batch["cluster_candidates"]
             candidates = [l for item in candidates for l in item]
             labels_eval = batch["cluster_gold_eval"]
-            preds, _ = model.predict(batch, candidates, labels, labels_eval)
-            preds = [cluster_id2sense[e] for e in preds.tolist()]
-            preds_list.append(preds)
+            preds, _ = coarse_model.predict(batch, candidates, labels, labels_eval)
+            preds = [cluster_id2sense[str(e)] for e in preds.tolist()]
+            preds_list += preds
     assert len(preds_list) == len(coarse_csv_data_list)
     ############################################################################
     
     # FINE2CLUSTER MODEL PREDICTIONS
     ############################################################################
-    model.eval()
+    fine_model.eval()
     with torch.no_grad():
         fine_preds_list, coarse_preds_list = [], []
         for batch in tqdm(data.test_dataloader()):
@@ -194,8 +199,8 @@ def log_fine2cluster(coarse_model, fine_model, data):
             fine_candidates = batch["fine_candidates"]
             fine_candidates = [l for item in fine_candidates for l in item]
             fine_labels_eval = batch["fine_gold_eval"]
-            fine_preds, _ = model.predict(batch, fine_candidates, fine_labels, fine_labels_eval)
-            fine_preds_list.append([fine_id2sense[e] for e in fine_preds.tolist()])
+            fine_preds, _ = fine_model.predict(batch, fine_candidates, fine_labels, fine_labels_eval)
+            fine_preds_list += [fine_id2sense[str(e)] for e in fine_preds.tolist()]
             # we prepare fine_preds and cluster_candidates...
             fine_preds = fine_preds.tolist()
             cluster_candidates_list = [e for l in batch["cluster_candidates"] for e in l]
@@ -212,7 +217,7 @@ def log_fine2cluster(coarse_model, fine_model, data):
                         if fine_id2sense[str(fine_pred)] == fine_sense[0]: # because fine_sense[1] is the gloss of the fine sense
                             coarse_preds.append(cluster_candidate)
                             cluster_found = True
-            coarse_preds_list.append([cluster_id2sense[e] for e in coarse_preds.tolist()])
+            coarse_preds_list += [cluster_id2sense[str(e)] for e in coarse_preds]
     assert len(fine_preds_list) == len(fine2cluster_csv_data_list)
     assert len(coarse_preds_list) == len(fine2cluster_csv_data_list)
     ############################################################################
@@ -235,8 +240,9 @@ def log_fine2cluster(coarse_model, fine_model, data):
     for coarse_idx in coarse_correct_idx_list:
         if coarse_idx not in fine2cluster_correct_idx_list:
             ris_coarse_csv_data_list.append(coarse_csv_data_list[coarse_idx])
-    with open("log_coarse_yes_fine2cluster_no.csv", mode='w', newline='') as csv_file:
+    with open("log/log_coarse_yes_fine2cluster_no.csv", mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["ID", "SENTENCE", "COARSE_PRED", "COARSE_LABELS", "COARSE_CANDIDATES"])
         for csv_data in ris_coarse_csv_data_list:
             csv_writer.writerow(csv_data)
             
@@ -245,11 +251,143 @@ def log_fine2cluster(coarse_model, fine_model, data):
     for fine2cluster_idx in fine2cluster_correct_idx_list:
         if fine2cluster_idx not in coarse_correct_idx_list:
             ris_fine2cluster_csv_data_list.append(fine2cluster_csv_data_list[fine2cluster_idx])
-    with open("log_fine2cluster_yes_coarse_no.csv", mode='w', newline='') as csv_file:
+    with open("log/log_fine2cluster_yes_coarse_no.csv", mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["ID", "SENTENCE", "FINE_PRED", "COARSE_PRED", "COARSE_LABELS", "COARSE_CANDIDATES"])
         for csv_data in ris_fine2cluster_csv_data_list:
             csv_writer.writerow(csv_data)
+
     
+def log_cluster_filter(coarse_model, fine_model, data):
     
+    fine_csv_data_list = []
+    cluster_filter_csv_data_list = []
+    ids, sentences, senses = read_dataset(data.hparams.data_test)
+    for i, sentence in enumerate(sentences):
+        current_data_senses = senses[i]
+        sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
+        for sense_idx in sense_idx_list:
+            fine_csv_data = [None, None, None, None, None]
+            cluster_filter_csv_data = [None, None, None, None, None, None, None]
+            fine_csv_data[0] = ids[0]
+            cluster_filter_csv_data[0] = ids[0]
+            input_sentence = copy.deepcopy(sentence)
+            input_sentence[int(sense_idx)] = "<<<" + input_sentence[int(sense_idx)] + ">>>" # we hihglight the word to disambiguate
+            input_sentence = ' '.join(input_sentence) # from a  list of tokens to a string
+            fine_csv_data[1] = input_sentence
+            cluster_filter_csv_data[1] = input_sentence
+            # these below are all lists
+            cluster_candidates = [e for e in current_data_senses["cluster_candidates"][sense_idx]]
+            fine_gold = [e for e in current_data_senses["fine_gold"][sense_idx]]
+            fine_candidates = [e for e in current_data_senses["fine_candidates"][sense_idx]]
+            fine_csv_data[3] = fine_gold
+            fine_csv_data[4] = fine_candidates
+            cluster_filter_csv_data[5] = fine_gold
+            cluster_filter_csv_data[6] = fine_candidates
+            # if the data filtering is ON and the sense has only one cluster candidate, we skip it
+            if data.hparams.cluster_candidates_filter and len(cluster_candidates) == 1:
+                continue
+            # otherwise we append
+            fine_csv_data_list.append(fine_csv_data)
+            cluster_filter_csv_data_list.append(cluster_filter_csv_data)
+    
+    # mapping
+    cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
+    cluster_id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r"))
+    fine_id2sense = json.load(open("data/mapping/fine_id2sense.json", "r"))
+    fine_sense2id = json.load(open("data/mapping/fine_sense2id.json", "r"))
+    
+    # FINE MODEL PREDICTIONS
+    ############################################################################
+    fine_model.eval()
+    with torch.no_grad():
+        preds_list = []
+        for batch in tqdm(data.test_dataloader()):
+            labels = batch["fine_gold"]
+            labels = [label for l in labels for label in l]
+            candidates = batch["fine_candidates"]
+            candidates = [l for item in candidates for l in item]
+            labels_eval = batch["fine_gold_eval"]
+            preds, _ = fine_model.predict(batch, candidates, labels, labels_eval)
+            preds = [fine_id2sense[str(e)] for e in preds.tolist()]
+            preds_list += preds
+    assert len(preds_list) == len(fine_csv_data_list)
+    ############################################################################
+    
+    # CLUSTER_FILTER MODEL PREDICTIONS
+    ############################################################################
+    fine_model.eval()
+    coarse_model.eval()
+    with torch.no_grad():
+        coarse_preds_list, fine_filtered_candidates_list, fine_preds_list = [], [], []
+        for batch in tqdm(data.test_dataloader()):
+            # we make cluster predictions
+            coarse_labels = batch["cluster_gold"]
+            coarse_labels = [label for l in coarse_labels for label in l]
+            cluster_candidates = batch["cluster_candidates"]
+            cluster_candidates = [l for item in cluster_candidates for l in item]
+            coarse_labels_eval = batch["cluster_gold_eval"]
+            coarse_preds, _ = coarse_model.predict(batch, cluster_candidates, coarse_labels, coarse_labels_eval)
+            coarse_preds = coarse_preds.tolist()
+            coarse_preds_list += [cluster_id2sense[str(e)] for e in coarse_preds]
             
+            # we now need the list of the fine senses within each predicted cluster
+            filtered_fine_senses_list = []
+            for pred_cluster in coarse_preds:
+                # this is the list of fine senses (in indices)
+                filtered_fine_senses = [ int(fine_sense2id[fine_sense[0]]) for fine_sense in cluster2fine_map[cluster_id2sense[str(pred_cluster)]] ]
+                filtered_fine_senses_list.append(filtered_fine_senses)
+            fine_filtered_candidates = []
+            for l in filtered_fine_senses_list:
+                new_l = []
+                for e in l: 
+                    new_l.append(fine_id2sense[str(e)])
+                fine_filtered_candidates.append(new_l)
+            fine_filtered_candidates_list += fine_filtered_candidates
             
+            # we finally predict fine senses using the list just computed...
+            fine_labels = batch["fine_gold"]
+            fine_labels = [label for l in fine_labels for label in l] 
+            fine_labels_eval = batch["fine_gold_eval"]
+            fine_preds, _ = fine_model.predict(batch, filtered_fine_senses_list, fine_labels, fine_labels_eval)
+            fine_preds_list += [fine_id2sense[str(e)] for e in fine_preds.tolist()]
+    assert len(coarse_preds_list) == len(cluster_filter_csv_data_list)
+    assert len(fine_filtered_candidates_list) == len(cluster_filter_csv_data_list)
+    assert len(fine_preds_list) == len(cluster_filter_csv_data_list)
+    ############################################################################
+    
+    fine_correct_idx_list = []
+    for i,l in enumerate(fine_csv_data_list):
+        if preds_list[i] in l[3]:
+            l[2] = preds_list[i]
+            fine_correct_idx_list.append(i)
+            
+    cluster_filter_correct_idx_list = []
+    for i,l in enumerate(cluster_filter_csv_data_list):
+        if fine_preds_list[i] in l[5]:
+            l[2] = coarse_preds_list[i]
+            l[3] = fine_filtered_candidates_list[i]
+            l[4] = fine_preds_list[i]
+            cluster_filter_correct_idx_list.append(i)
+            
+    # first log file --> instances correctly detected by coarse and not by fine2cluster
+    ris_fine_csv_data_list = []
+    for fine_idx in fine_correct_idx_list:
+        if fine_idx not in cluster_filter_correct_idx_list:
+            ris_fine_csv_data_list.append(fine_csv_data_list[fine_idx])
+    with open("log/log_fine_yes_cluster_filter_no.csv", mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["ID", "SENTENCE", "FINE_PRED", "FINE_LABELS", "FINE_CANDIDATES"])
+        for csv_data in ris_fine_csv_data_list:
+            csv_writer.writerow(csv_data)
+            
+    # second log file --> instances correctly detected by fine2cluster and not by coarse
+    ris_cluster_filter_csv_data_list = []
+    for cluster_filter_idx in cluster_filter_correct_idx_list:
+        if cluster_filter_idx not in fine_correct_idx_list:
+            ris_cluster_filter_csv_data_list.append(cluster_filter_csv_data_list[cluster_filter_idx])
+    with open("log/log_cluster_filter_yes_fine_no.csv", mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["ID", "SENTENCE", "COARSE_PRED", "FILTERED_FINE_CANDIDATES", "FINE_PRED", "FINE_LABELS", "FINE_CANDIDATES"])
+        for csv_data in ris_cluster_filter_csv_data_list:
+            csv_writer.writerow(csv_data)

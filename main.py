@@ -4,7 +4,7 @@ from src.data_module import WSD_DataModule
 from src.hyperparameters import Hparams
 from src.train import train_model
 from src.model import WSD_Model
-from src.evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation
+from src.evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation, log_fine2cluster, log_cluster_filter
 
 import torch
 import random
@@ -81,6 +81,32 @@ def main(arguments):
             data.setup()
             # evaluation on fine senses using a coarse model for filtering out
             cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=bool(arguments.oracle))
+
+    elif arguments.mode == "log":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        hparams = asdict(Hparams())
+        hparams["encoder"] = arguments.encoder
+        if arguments.type == "fine2cluster":
+            ckpt1 = arguments.model
+            ckpt2 = arguments.model2
+            coarse_model = WSD_Model.load_from_checkpoint(ckpt1).to(device)
+            assert coarse_model.hparams.coarse_or_fine == "coarse"
+            fine_model = WSD_Model.load_from_checkpoint(ckpt2).to(device)
+            assert fine_model.hparams.coarse_or_fine == "fine"
+            data = WSD_DataModule(hparams)
+            data.setup()
+            log_fine2cluster(coarse_model, fine_model, data)
+            
+        elif arguments.type == "cluster_filter":
+            ckpt1 = arguments.model
+            ckpt2 = arguments.model2
+            coarse_model = WSD_Model.load_from_checkpoint(ckpt1).to(device)
+            assert coarse_model.hparams.coarse_or_fine == "coarse"
+            fine_model = WSD_Model.load_from_checkpoint(ckpt2).to(device)
+            assert fine_model.hparams.coarse_or_fine == "fine"
+            data = WSD_DataModule(hparams)
+            data.setup()
+            log_cluster_filter(coarse_model, fine_model, data)
 
 if __name__ == '__main__':
     set_seed(99)
