@@ -4,7 +4,7 @@ from dataclasses import dataclass
 class Hparams:
     
     ## dataloader params
-    coarse_or_fine: str = "coarse" # coarse-grained or fine-grained task
+    coarse_or_fine: str = "fine" # coarse-grained or fine-grained task
     data_train: str = "data/wsd_datasets/train.json" # train dataset path
     data_val: str = "data/wsd_datasets/dev.json" # validation dataset path
     data_test: str = "data/wsd_datasets/test.json" # test dataset path

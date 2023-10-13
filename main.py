@@ -30,7 +30,6 @@ def parse_args():
     parser.add_argument("--encoder", type=str, default="bert", help="encoder type", required=True)
     parser.add_argument("--model", type=str, default="checkpoints/coarse.ckpt", help="path to model", required=False)
     parser.add_argument("--model2", type=str, default="checkpoints/coarse.ckpt", help="path to second model", required=False)
-    parser.add_argument("--oracle", type=str, default="False", help="use or not the oracle in the 'cluster_filter' scenario", required=False)
     return parser.parse_args()
 
 
@@ -39,7 +38,7 @@ def main(arguments):
         wandb.login() # this is the key to paste each time for login: 65a23b5182ca8ce3eb72530af592cf3bfa19de85
 
         version_name = arguments.type+"_"+arguments.encoder
-        with wandb.init(entity="lavallone", project="homonyms", name=version_name, mode="online"):
+        with wandb.init(entity="lavallone", project="homonyms", name=version_name, mode="offline"):
             hparams = asdict(Hparams())
             hparams["encoder"] = arguments.encoder
             data = WSD_DataModule(hparams)
@@ -80,7 +79,7 @@ def main(arguments):
             data = WSD_DataModule(hparams)
             data.setup()
             # evaluation on fine senses using a coarse model for filtering out
-            cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=bool(arguments.oracle))
+            cluster_filter_evaluation(coarse_model, fine_model, data)
 
     elif arguments.mode == "log":
         device = "cuda" if torch.cuda.is_available() else "cpu"

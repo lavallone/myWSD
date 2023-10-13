@@ -60,7 +60,10 @@ def fine2cluster_evaluation(model, data):
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
 
 # using a coarse-model to filter-out the set of possible fine sense predictions
-def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=False):
+def cluster_filter_evaluation(coarse_model, fine_model, data):
+    # use the oracle or not
+    oracle_or_not = False
+    
     cluster2fine_map = json.load(open("data/mapping/cluster2fine_map.json", "r"))
     cluster_id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r"))
     fine_sense2id = json.load(open("data/mapping/fine_sense2id.json", "r"))
@@ -69,7 +72,7 @@ def cluster_filter_evaluation(coarse_model, fine_model, data, oracle_or_not=Fals
     with torch.no_grad():
         preds_list, labels_list = torch.tensor([]), torch.tensor([])
         for batch in tqdm(data.test_dataloader()):
-            if oracle_or_not == True: # if there's an oracle which tells us the correct homonym cluster...
+            if oracle_or_not == True: # if there's an oracle which tells us the correct homonym cluster
                 coarse_preds = torch.tensor(batch["cluster_gold"])
                 mask = coarse_preds!=-100
                 coarse_preds = coarse_preds[mask]
@@ -138,14 +141,14 @@ def log_fine2cluster(coarse_model, fine_model, data):
     coarse_csv_data_list = []
     fine2cluster_csv_data_list = []
     ids, sentences, senses = read_dataset(data.hparams.data_test)
-    for i, sentence in enumerate(sentences):
+    for i, sentence in enumerate(tqdm(sentences)):
         current_data_senses = senses[i]
         sense_idx_list = list( current_data_senses["cluster_gold"].keys() )
         for sense_idx in sense_idx_list:
             coarse_csv_data = [None, None, None, None, None]
             fine2cluster_csv_data = [None, None, None, None, None, None]
-            coarse_csv_data[0] = ids[0]
-            fine2cluster_csv_data[0] = ids[0]
+            coarse_csv_data[0] = ids[i]
+            fine2cluster_csv_data[0] = ids[i]
             input_sentence = copy.deepcopy(sentence)
             input_sentence[int(sense_idx)] = "<<<" + input_sentence[int(sense_idx)] + ">>>" # we hihglight the word to disambiguate
             input_sentence = ' '.join(input_sentence) # from a  list of tokens to a string
@@ -227,6 +230,8 @@ def log_fine2cluster(coarse_model, fine_model, data):
         if preds_list[i] in l[3]:
             l[2] = preds_list[i]
             coarse_correct_idx_list.append(i)
+    print(f"\nTotal of {len(coarse_csv_data_list)} items")
+    print(f"\nCOARSE model accuracy is {round(len(coarse_correct_idx_list)/len(coarse_csv_data_list),4)}")
             
     fine2cluster_correct_idx_list = []
     for i,l in enumerate(fine2cluster_csv_data_list):
@@ -234,6 +239,7 @@ def log_fine2cluster(coarse_model, fine_model, data):
             l[2] = fine_preds_list[i]
             l[3] = coarse_preds_list[i]
             fine2cluster_correct_idx_list.append(i)
+    print(f"\nFINE2CLUSTER model accuracy is {round(len(fine2cluster_correct_idx_list)/len(fine2cluster_csv_data_list),4)}")
             
     # first log file --> instances correctly detected by coarse and not by fine2cluster
     ris_coarse_csv_data_list = []
@@ -257,7 +263,7 @@ def log_fine2cluster(coarse_model, fine_model, data):
         for csv_data in ris_fine2cluster_csv_data_list:
             csv_writer.writerow(csv_data)
 
-    
+
 def log_cluster_filter(coarse_model, fine_model, data):
     
     fine_csv_data_list = []
@@ -269,15 +275,14 @@ def log_cluster_filter(coarse_model, fine_model, data):
         for sense_idx in sense_idx_list:
             fine_csv_data = [None, None, None, None, None]
             cluster_filter_csv_data = [None, None, None, None, None, None, None]
-            fine_csv_data[0] = ids[0]
-            cluster_filter_csv_data[0] = ids[0]
+            fine_csv_data[0] = ids[i]
+            cluster_filter_csv_data[0] = ids[i]
             input_sentence = copy.deepcopy(sentence)
             input_sentence[int(sense_idx)] = "<<<" + input_sentence[int(sense_idx)] + ">>>" # we hihglight the word to disambiguate
             input_sentence = ' '.join(input_sentence) # from a  list of tokens to a string
             fine_csv_data[1] = input_sentence
             cluster_filter_csv_data[1] = input_sentence
             # these below are all lists
-            cluster_candidates = [e for e in current_data_senses["cluster_candidates"][sense_idx]]
             fine_gold = [e for e in current_data_senses["fine_gold"][sense_idx]]
             fine_candidates = [e for e in current_data_senses["fine_candidates"][sense_idx]]
             fine_csv_data[3] = fine_gold
@@ -285,7 +290,7 @@ def log_cluster_filter(coarse_model, fine_model, data):
             cluster_filter_csv_data[5] = fine_gold
             cluster_filter_csv_data[6] = fine_candidates
             # if the data filtering is ON and the sense has only one cluster candidate, we skip it
-            if data.hparams.cluster_candidates_filter and len(cluster_candidates) == 1:
+            if data.hparams.cluster_candidates_filter and len([e for e in current_data_senses["cluster_candidates"][sense_idx]]) == 1:
                 continue
             # otherwise we append
             fine_csv_data_list.append(fine_csv_data)
@@ -316,19 +321,26 @@ def log_cluster_filter(coarse_model, fine_model, data):
     
     # CLUSTER_FILTER MODEL PREDICTIONS
     ############################################################################
+    oracle_or_not = True
     fine_model.eval()
     coarse_model.eval()
     with torch.no_grad():
         coarse_preds_list, fine_filtered_candidates_list, fine_preds_list = [], [], []
         for batch in tqdm(data.test_dataloader()):
-            # we make cluster predictions
-            coarse_labels = batch["cluster_gold"]
-            coarse_labels = [label for l in coarse_labels for label in l]
-            cluster_candidates = batch["cluster_candidates"]
-            cluster_candidates = [l for item in cluster_candidates for l in item]
-            coarse_labels_eval = batch["cluster_gold_eval"]
-            coarse_preds, _ = coarse_model.predict(batch, cluster_candidates, coarse_labels, coarse_labels_eval)
-            coarse_preds = coarse_preds.tolist()
+            if oracle_or_not == True:
+                coarse_preds = torch.tensor(batch["cluster_gold"])
+                mask = coarse_preds!=-100
+                coarse_preds = coarse_preds[mask]
+                coarse_preds = coarse_preds.tolist() # already flattened
+            else:
+                # we make cluster predictions
+                coarse_labels = batch["cluster_gold"]
+                coarse_labels = [label for l in coarse_labels for label in l]
+                cluster_candidates = batch["cluster_candidates"]
+                cluster_candidates = [l for item in cluster_candidates for l in item]
+                coarse_labels_eval = batch["cluster_gold_eval"]
+                coarse_preds, _ = coarse_model.predict(batch, cluster_candidates, coarse_labels, coarse_labels_eval)
+                coarse_preds = coarse_preds.tolist()
             coarse_preds_list += [cluster_id2sense[str(e)] for e in coarse_preds]
             
             # we now need the list of the fine senses within each predicted cluster
@@ -361,6 +373,8 @@ def log_cluster_filter(coarse_model, fine_model, data):
         if preds_list[i] in l[3]:
             l[2] = preds_list[i]
             fine_correct_idx_list.append(i)
+    print(f"\nTotal of {len(fine_csv_data_list)} items")
+    print(f"\nFINE model accuracy is {round(len(fine_correct_idx_list)/len(fine_csv_data_list),4)}")
             
     cluster_filter_correct_idx_list = []
     for i,l in enumerate(cluster_filter_csv_data_list):
@@ -369,13 +383,15 @@ def log_cluster_filter(coarse_model, fine_model, data):
             l[3] = fine_filtered_candidates_list[i]
             l[4] = fine_preds_list[i]
             cluster_filter_correct_idx_list.append(i)
+    print(f"\nCLUSTER_FILTER model accuracy is {round(len(cluster_filter_correct_idx_list)/len(cluster_filter_csv_data_list),4)}")
             
     # first log file --> instances correctly detected by coarse and not by fine2cluster
     ris_fine_csv_data_list = []
     for fine_idx in fine_correct_idx_list:
         if fine_idx not in cluster_filter_correct_idx_list:
             ris_fine_csv_data_list.append(fine_csv_data_list[fine_idx])
-    with open("log/log_fine_yes_cluster_filter_no.csv", mode='w', newline='') as csv_file:
+    csv_name_1 = "log/log_fine_yes_cluster_filter_"+"ORACLE"+"_no.csv" if oracle_or_not else "log/log_fine_yes_cluster_filter_no.csv"
+    with open(csv_name_1, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["ID", "SENTENCE", "FINE_PRED", "FINE_LABELS", "FINE_CANDIDATES"])
         for csv_data in ris_fine_csv_data_list:
@@ -386,7 +402,8 @@ def log_cluster_filter(coarse_model, fine_model, data):
     for cluster_filter_idx in cluster_filter_correct_idx_list:
         if cluster_filter_idx not in fine_correct_idx_list:
             ris_cluster_filter_csv_data_list.append(cluster_filter_csv_data_list[cluster_filter_idx])
-    with open("log/log_cluster_filter_yes_fine_no.csv", mode='w', newline='') as csv_file:
+    csv_name_2 = "log/log_cluster_filter_"+"ORACLE"+"_yes_fine_no.csv" if oracle_or_not else "log/log_cluster_filter_yes_fine_no.csv"
+    with open(csv_name_2, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["ID", "SENTENCE", "COARSE_PRED", "FILTERED_FINE_CANDIDATES", "FINE_PRED", "FINE_LABELS", "FINE_CANDIDATES"])
         for csv_data in ris_cluster_filter_csv_data_list:

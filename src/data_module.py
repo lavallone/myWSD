@@ -48,7 +48,7 @@ def read_dataset(path):
     sentence_id_list, sentences_list, senses_list = [], [], []
     with open(path) as f:
         data = json.load(f)
-    for sentence_id, sentence_data in list(data.items()):#[:100]:
+    for sentence_id, sentence_data in list(data.items()):#[:50]:
         sentence_id_list.append(sentence_id)
         # old structure
         if type(sentence_data["instance_ids"]) == dict:
