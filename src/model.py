@@ -19,11 +19,12 @@ class WSD_Model(pl.LightningModule):
         elif self.hparams.encoder == "electra": self.encoder = AutoModel.from_pretrained("google/electra-large-discriminator")
         
         # we set all parameters to be not trainable
-        for param in self.encoder.parameters():
-            param.requires_grad = False
+        ##!
+        # for param in self.encoder.parameters():
+        #     param.requires_grad = False
         
         # classification HEAD
-        n = 1 if self.hparams.last_hidden_state else 4
+        n = 1 if self.hparams.last_hidden_state else 4 ##!
         self.batch_norm = nn.BatchNorm1d(n*1024)
         self.hidden_MLP = nn.Linear(n*1024, self.hparams.hidden_dim, bias=True)
         self.act_fun = nn.SiLU(inplace=True) # Swish activation function
@@ -40,14 +41,15 @@ class WSD_Model(pl.LightningModule):
         # if the precision is set to 16 bit, the cross entropy should have GPU tensors!
         assert self.hparams.precision == 32 or self.gpu_or_cpu == "cuda"
     
-    def train(self, mode=True):
-        super().train(mode)
-        self.encoder.eval()
+    ##!
+    # def train(self, mode=True):
+    #     super().train(mode)
+    #     self.encoder.eval()
                
     def forward(self, batch):
         text = batch["inputs"].to(self.device)
         # we take only the last hidden layer
-        if self.hparams.last_hidden_state:
+        if self.hparams.last_hidden_state: ##!
             embed_text = self.encoder(**text)
             embed_text = embed_text.last_hidden_state
         else: # we take the hidden representation of the last four layers of each token

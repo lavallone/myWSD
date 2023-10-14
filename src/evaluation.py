@@ -3,6 +3,7 @@ from tqdm import tqdm
 import torch
 import csv
 import copy
+import pickle
 from src.data_module import read_dataset
 
 # compute accuracy
@@ -19,7 +20,7 @@ def fine2cluster_evaluation(model, data):
     model.eval()
     with torch.no_grad():
         preds_list, labels_list = [], []
-        for batch in tqdm(data.test_dataloader()):
+        for batch in tqdm(data.test_dataloader()): ##!
             # we first predict fine senses
             fine_labels = batch["fine_gold"]
             fine_labels = [label for l in fine_labels for label in l]
@@ -71,7 +72,7 @@ def cluster_filter_evaluation(coarse_model, fine_model, data):
     coarse_model.eval()
     with torch.no_grad():
         preds_list, labels_list = torch.tensor([]), torch.tensor([])
-        for batch in tqdm(data.test_dataloader()):
+        for batch in tqdm(data.test_dataloader()): ##!
             if oracle_or_not == True: # if there's an oracle which tells us the correct homonym cluster
                 coarse_preds = torch.tensor(batch["cluster_gold"])
                 mask = coarse_preds!=-100
@@ -115,7 +116,7 @@ def base_evaluation(model, data):
     model.eval()
     with torch.no_grad():
         preds_list, labels_list = torch.tensor([]), torch.tensor([])
-        for batch in tqdm(data.test_dataloader()):
+        for batch in tqdm(data.test_dataloader()): ##!
             labels = batch["cluster_gold"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
             labels = [label for l in labels for label in l]
             candidates = batch["cluster_candidates"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
@@ -131,6 +132,63 @@ def base_evaluation(model, data):
         ris_accuracy = test_accuracy(preds_list, labels_list)
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
+
+# evaluation of a subset of test/dev datasets using 4 different encoders type       
+def subset_evaluation(model, data):
+    items_id_list = []
+    with open(data.hparams.data_test) as f: ##!
+        data_dict = json.load(f)
+    for sentence_id, sentence_data in list(data_dict.items()):
+        # old structure
+        if type(sentence_data["instance_ids"]) == dict:
+            sense_idx_list = list(sentence_data["senses"].keys())
+            for sense_idx in sense_idx_list:
+                if data.hparams.cluster_candidates_filter and len(sentence_data["candidate_clusters"][sense_idx]) == 1:
+                    continue
+                items_id_list.append(sentence_data["instance_ids"][sense_idx])
+        else: # new structure
+            if data.hparams.cluster_candidates_filter and len(sentence_data["candidate_clusters"]) == 1:
+                continue
+            items_id_list.append(sentence_id)
+    
+    with open('data/subsets/test_dictionary.pkl', 'rb') as subset_file: ##!
+        loaded_data = pickle.load(subset_file)
+    subset_list = []
+    for k in loaded_data.keys():
+        if len(loaded_data[k]) == 0:
+            subset_list.append(k)
+        else:
+            subset_list += loaded_data[k]
+    subset_idx_list = []
+    for i in range(len(items_id_list)):
+        if items_id_list[i] in subset_list:
+            subset_idx_list.append(i)
+    
+    # COARSE PREDICTIONS
+    subset_idx_list = torch.tensor(subset_idx_list)
+    model.eval()
+    with torch.no_grad():
+        preds_list, labels_list = torch.tensor([]), torch.tensor([])
+        for batch in tqdm(data.test_dataloader()): ##!
+            labels = batch["cluster_gold"]
+            labels = [label for l in labels for label in l]
+            candidates = batch["cluster_candidates"]
+            candidates = [l for item in candidates for l in item]
+            labels_eval = batch["cluster_gold_eval"]
+            preds, labels = model.predict(batch, candidates, labels, labels_eval)
+            assert preds.shape[0] == labels.shape[0]
+            preds_list = torch.cat((preds_list, preds))
+            labels_list = torch.cat((labels_list, labels))
+            
+        subset_preds_list = torch.index_select(preds_list, 0, subset_idx_list)
+        subset_labels_list = torch.index_select(labels_list, 0, subset_idx_list)
+        assert subset_preds_list.shape[0] == subset_labels_list.shape[0]
+        print(f"\nOn a total of {subset_preds_list.shape[0]} samples...")
+        ris_accuracy = test_accuracy(subset_preds_list, subset_labels_list)
+        print()
+        print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
+        
+        
 
 ########################################################################################      
 # LOGGING FUNCTIONS FOR QUALITATIVELY EVALUATE fine2cluster AND cluster_filter METHODS #
@@ -262,7 +320,7 @@ def log_fine2cluster(coarse_model, fine_model, data):
         csv_writer.writerow(["ID", "SENTENCE", "FINE_PRED", "COARSE_PRED", "COARSE_LABELS", "COARSE_CANDIDATES"])
         for csv_data in ris_fine2cluster_csv_data_list:
             csv_writer.writerow(csv_data)
-
+    
 
 def log_cluster_filter(coarse_model, fine_model, data):
     
