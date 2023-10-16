@@ -8,10 +8,10 @@ class Hparams:
     data_train: str = "data/wsd_datasets/train.json" # train dataset path
     data_val: str = "data/wsd_datasets/dev.json" # validation dataset path
     data_test: str = "data/wsd_datasets/test.json" # test dataset path
-    batch_size: int = 1 # size of the batches
+    batch_size: int = 8 # size of the batches
     n_cpu: int = 8 # number of cpu threads to use for the dataloaders
     pin_memory: bool = False # parameter to pin memory in dataloader
-    cluster_candidates_filter: bool = False
+    cluster_candidates_filter: bool = True
     
     ## train params
     lr: float = 1e-4

@@ -20,8 +20,8 @@ class WSD_Model(pl.LightningModule):
         
         # we set all parameters to be not trainable
         ##!
-        # for param in self.encoder.parameters():
-        #     param.requires_grad = False
+        for param in self.encoder.parameters():
+            param.requires_grad = False
         
         # classification HEAD
         n = 1 if self.hparams.last_hidden_state else 4 ##!
@@ -42,9 +42,9 @@ class WSD_Model(pl.LightningModule):
         assert self.hparams.precision == 32 or self.gpu_or_cpu == "cuda"
     
     ##!
-    # def train(self, mode=True):
-    #     super().train(mode)
-    #     self.encoder.eval()
+    def train(self, mode=True):
+        super().train(mode)
+        self.encoder.eval()
                
     def forward(self, batch):
         text = batch["inputs"].to(self.device)
