@@ -11,14 +11,14 @@ class Hparams:
     batch_size: int = 8 # size of the batches
     n_cpu: int = 8 # number of cpu threads to use for the dataloaders
     pin_memory: bool = False # parameter to pin memory in dataloader
-    cluster_candidates_filter: bool = True
+    cluster_candidates_filter: bool = False
     
     ## train params
     lr: float = 1e-4
-    precision: int = 16 # 16 or 32 precision training
+    precision: int = 32 # 16 or 32 precision training
     
     ## model params
     encoder: str = "bert" # bert, roberta, deberta, electra
-    last_hidden_state: bool = False 
+    last_hidden_state: bool = True 
     hidden_dim: int = 512 
     dropout: float = 0.1 # dropout value
