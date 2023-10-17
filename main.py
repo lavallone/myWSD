@@ -4,7 +4,8 @@ from src.data_module import WSD_DataModule
 from src.hyperparameters import Hparams
 from src.train import train_model
 from src.model import WSD_Model
-from src.evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation, log_fine2cluster, log_cluster_filter, subset_evaluation
+from src.evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation, \
+                           log_fine2cluster, log_cluster_filter, coarse_subset_evaluation, fine2cluster_subset_evaluation
 
 import torch
 import random
@@ -81,12 +82,21 @@ def main(arguments):
             # evaluation on fine senses using a coarse model for filtering out
             cluster_filter_evaluation(coarse_model, fine_model, data)
         
-        elif arguments.type == "subset":
+        elif arguments.type == "coarse_subset":
             ckpt = arguments.model
             model = WSD_Model.load_from_checkpoint(ckpt).to(device)
+            assert model.hparams.coarse_or_fine == "coarse"
             data = WSD_DataModule(hparams)
             data.setup()
-            subset_evaluation(model, data)
+            coarse_subset_evaluation(model, data)
+            
+        elif arguments.type == "fine2cluster_subset":
+            ckpt = arguments.model
+            model = WSD_Model.load_from_checkpoint(ckpt).to(device)
+            assert model.hparams.coarse_or_fine == "fine"
+            data = WSD_DataModule(hparams)
+            data.setup()
+            fine2cluster_subset_evaluation(model, data)
 
     elif arguments.mode == "log":
         device = "cuda" if torch.cuda.is_available() else "cpu"
