@@ -183,6 +183,15 @@ class WSD_DataModule(pl.LightningDataModule):
         _, self.train_sentences, self.train_senses = read_dataset(self.hparams.data_train)
         _, self.val_sentences, self.val_senses = read_dataset(self.hparams.data_val)
         _, self.test_sentences, self.test_senses = read_dataset(self.hparams.data_test)
+        
+        # tokenizer instantiation 
+        self.tokenizer = None
+        if self.hparams.encoder == "bert": self.tokenizer = AutoTokenizer.from_pretrained("bert-large-cased")
+        elif self.hparams.encoder == "roberta": self.tokenizer = AutoTokenizer.from_pretrained("roberta-large", add_prefix_space=True)
+        elif self.hparams.encoder == "deberta": 
+            self.tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large")
+            logging.set_verbosity(40) # to avoid warnings
+        elif self.hparams.encoder == "electra": self.tokenizer = AutoTokenizer.from_pretrained("google/electra-large-discriminator")
 
     def setup(self, stage=None):
         # TRAIN
@@ -232,16 +241,10 @@ class WSD_DataModule(pl.LightningDataModule):
     # for efficiency reasons, each time we pick a batch from the dataloader, we call this function!
     def collate(self, batch):
         batch_out = dict()
-        if self.hparams.encoder == "bert": tokenizer = AutoTokenizer.from_pretrained("bert-large-cased")
-        elif self.hparams.encoder == "roberta": tokenizer = AutoTokenizer.from_pretrained("roberta-large", add_prefix_space=True)
-        elif self.hparams.encoder == "deberta": 
-            tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large")
-            logging.set_verbosity(40) # to avoid warnings
-        elif self.hparams.encoder == "electra": tokenizer = AutoTokenizer.from_pretrained("google/electra-large-discriminator")
-        batch_out["inputs"] = tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt", is_split_into_words=True)
+        batch_out["inputs"] = self.tokenizer([sample["input"] for sample in batch], padding=True, truncation=True, return_tensors="pt", is_split_into_words=True)
         
         # check that the number of <UNK> tokens is zero
-        unk_token_id = tokenizer.convert_tokens_to_ids("[UNK]")
+        unk_token_id = self.tokenizer.convert_tokens_to_ids("[UNK]")
         assert (batch_out["inputs"]["input_ids"] == unk_token_id).sum().item() == 0
         # to check if no sequence is being truncated
         assert len(batch_out["inputs"]["input_ids"]) < 512
