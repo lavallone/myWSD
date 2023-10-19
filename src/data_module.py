@@ -9,40 +9,6 @@ from transformers.utils import logging
 import warnings
 warnings.filterwarnings('ignore')
 
-######################################### UTILITY PREPROCESSING FUNCTIONS ##############################################
-## CLEAN TOKENS
-def clean_tokens(data): # very simple token cleaner (not needed to make big operations here because BERT encoder works pretty well!)
-    for sample in data:
-        for i in range(len(sample["words"])):
-            sample["words"][i] = sample["words"][i].lower()
-            sample["words"][i] = sample["words"][i].replace(" ", "")
-            sample["words"][i] = sample["words"][i].replace("`", "'")
-            sample["words"][i] = sample["words"][i].replace("[", "(")
-            sample["words"][i] = sample["words"][i].replace("]", ")")
-            sample["words"][i] = sample["words"][i].encode("ascii", "ignore").decode()
-        for i in range(len(sample["lemmas"])): # do it also for lemmas!
-            sample["lemmas"][i] = sample["lemmas"][i].lower()
-            sample["lemmas"][i] = sample["lemmas"][i].replace(" ", "")
-            sample["lemmas"][i] = sample["lemmas"][i].replace("`", "'")
-            sample["lemmas"][i] = sample["lemmas"][i].replace("[", "(")
-            sample["lemmas"][i] = sample["lemmas"][i].replace("]", ")")
-            sample["lemmas"][i] = sample["lemmas"][i].encode("ascii", "ignore").decode()
-                
-## FILTER SENTENCES
-def filter_sentences(train_sentences, train_senses, min_sent_length=5, max_sent_length=85):
-    train_items = list(zip(train_sentences, train_senses))
-    train_items = list(filter(lambda x: len(x[0]["words"])>=min_sent_length and len(x[0]["words"])<=max_sent_length, train_items)) # min and max length
-    for item in train_items:
-        # we check that each train sentence has at least one word to be disambiguated!
-        assert len(item[0]["instance_ids"].keys()) != 0
-    ris1, ris2 = [], []
-    for e1,e2 in train_items:
-        ris1.append(e1)
-        ris2.append(e2)
-    return ris1, ris2
-
-########################################################################################################################                
-
 # utility function for reading the dataset
 def read_dataset(path):
     sentence_id_list, sentences_list, senses_list = [], [], []
@@ -184,7 +150,8 @@ class WSD_DataModule(pl.LightningDataModule):
         _, self.val_sentences, self.val_senses = read_dataset(self.hparams.data_val)
         _, self.test_sentences, self.test_senses = read_dataset(self.hparams.data_test)
         
-        # tokenizer instantiation 
+        # TOKENIZER instantiation 
+        # Do not instantiate them in the collate function!!! --> training time will slow down drastically!
         self.tokenizer = None
         if self.hparams.encoder == "bert": self.tokenizer = AutoTokenizer.from_pretrained("bert-large-cased")
         elif self.hparams.encoder == "roberta": self.tokenizer = AutoTokenizer.from_pretrained("roberta-large", add_prefix_space=True)
