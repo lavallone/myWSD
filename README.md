@@ -1,5 +1,5 @@
 # homonyms_clusters
-🏦 🏞 Word Sense Disambiguation (WSD) of homonyms clusters. Fully Connnected layers on top of BERT-like models.
+🏦 🏞 Homonymy Disambiguation (coarse-grained WSD). Fully Connnected layers on top of Pretrained Language Models (PLMs).
 
 **WandB runs**: https://wandb.ai/lavallone/homonyms?workspace=user-lavallone
 
