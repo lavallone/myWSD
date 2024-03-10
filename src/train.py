@@ -17,6 +17,6 @@ def train_model(data, model, experiment_name, metric_to_monitor, mode, epochs, p
     trainer = Trainer(
         logger=logger, max_epochs=epochs, log_every_n_steps=1, gpus=n_gpus,
         callbacks=[checkpoint_callback],
-        num_sanity_val_steps=0, precision=precision, gradient_clip_algorithm="norm", gradient_clip_val=1.0, #accumulate_grad_batches=1
+        num_sanity_val_steps=0, precision=precision, gradient_clip_algorithm="norm", gradient_clip_val=1.0, accumulate_grad_batches=2,
         )
     trainer.fit(model, data)

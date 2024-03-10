@@ -5,7 +5,7 @@ from src.hyperparameters import Hparams
 from src.train import train_model
 from src.model import WSD_Model
 from src.evaluation import base_evaluation, fine2cluster_evaluation, cluster_filter_evaluation, \
-                           log_fine2cluster, log_cluster_filter, coarse_subset_evaluation, fine2cluster_subset_evaluation
+                           log_fine2cluster, log_cluster_filter, base_subset_evaluation, fine2cluster_subset_evaluation
 
 import torch
 import random
