@@ -4,7 +4,7 @@ from dataclasses import dataclass
 class Hparams:
     
     ## dataloader params
-    coarse_or_fine: str = "fine" # coarse-grained or fine-grained task
+    coarse_or_fine: str = "coarse" # coarse-grained or fine-grained task
     data_train: str = "data/wsd_datasets/train.json" # train dataset path
     data_val: str = "data/wsd_datasets/dev.json" # validation dataset path
     data_test: str = "data/wsd_datasets/test.json" # test dataset path
@@ -19,6 +19,6 @@ class Hparams:
     
     ## model params
     encoder: str = "bert" # bert, roberta, deberta, electra
-    last_hidden_state: bool = True 
+    last_hidden_state: bool = False 
     hidden_dim: int = 512 
     dropout: float = 0.1 # dropout value

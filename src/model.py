@@ -29,8 +29,8 @@ class WSD_Model(pl.LightningModule):
         self.hidden_MLP = nn.Linear(n*1024, self.hparams.hidden_dim, bias=True)
         self.act_fun = nn.SiLU(inplace=True) # Swish activation function
         self.dropout = nn.Dropout(self.hparams.dropout)
-        self.num_senses = 106553 if self.hparams.coarse_or_fine == "coarse" else 117659 # sense inventory
-        self.classifier = nn.Linear(self.hparams.hidden_dim, self.num_senses, bias=False) # final linear projection with no bias
+        self.num_senses = 106386 if self.hparams.coarse_or_fine == "coarse" else 117659 # sense inventory
+        self.classifier = nn.Linear(self.hparams.hidden_dim, self.num_senses, bias=True) # final linear projection with no bias
         
         # mapping from 'id' to name of the 'sense'
         self.id2sense = json.load(open("data/mapping/cluster_id2sense.json", "r")) if self.hparams.coarse_or_fine == "coarse" else json.load(open("data/mapping/fine_id2sense.json", "r"))
