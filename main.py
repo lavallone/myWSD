@@ -82,13 +82,12 @@ def main(arguments):
             # evaluation on fine senses using a coarse model for filtering out
             cluster_filter_evaluation(coarse_model, fine_model, data)
         
-        elif arguments.type == "coarse_subset":
+        elif arguments.type == "base_subset":
             ckpt = arguments.model
             model = WSD_Model.load_from_checkpoint(ckpt).to(device)
-            assert model.hparams.coarse_or_fine == "coarse"
             data = WSD_DataModule(hparams)
             data.setup()
-            coarse_subset_evaluation(model, data)
+            base_subset_evaluation(model, data)
             
         elif arguments.type == "fine2cluster_subset":
             ckpt = arguments.model

@@ -133,8 +133,8 @@ def base_evaluation(model, data):
         print()
         print(f"| Accuracy Score for test set:  {round(ris_accuracy, 4)} |")
 
-# COARSE evaluation of a subset of test/dev datasets using 4 different encoders type       
-def coarse_subset_evaluation(model, data):
+# evaluation of a subset of test/dev datasets using 4 different encoders type       
+def base_subset_evaluation(model, data):
     items_id_list = []
     with open(data.hparams.data_test) as f: ##!
         data_dict = json.load(f)
@@ -151,7 +151,7 @@ def coarse_subset_evaluation(model, data):
                 continue
             items_id_list.append(sentence_id)
     
-    with open('data/subsets/test_dictionary.pkl', 'rb') as subset_file: ##!
+    with open('data/subsets/test_dictionary_lemma.pkl', 'rb') as subset_file: ##!
         loaded_data = pickle.load(subset_file)
     subset_list = []
     for k in loaded_data.keys():
@@ -164,17 +164,17 @@ def coarse_subset_evaluation(model, data):
         if items_id_list[i] in subset_list:
             subset_idx_list.append(i)
     
-    # COARSE PREDICTIONS
+    # PREDICTIONS
     subset_idx_list = torch.tensor(subset_idx_list)
     model.eval()
     with torch.no_grad():
         preds_list, labels_list = torch.tensor([]), torch.tensor([])
         for batch in tqdm(data.test_dataloader()): ##!
-            labels = batch["cluster_gold"]
+            labels = batch["cluster_gold"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold"]
             labels = [label for l in labels for label in l]
-            candidates = batch["cluster_candidates"]
+            candidates = batch["cluster_candidates"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_candidates"]
             candidates = [l for item in candidates for l in item]
-            labels_eval = batch["cluster_gold_eval"]
+            labels_eval = batch["cluster_gold_eval"] if model.hparams.coarse_or_fine == "coarse" else batch["fine_gold_eval"]
             preds, labels = model.predict(batch, candidates, labels, labels_eval)
             assert preds.shape[0] == labels.shape[0]
             preds_list = torch.cat((preds_list, preds))
