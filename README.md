@@ -1,4 +1,5 @@
-# homonymy_disambiguation
+# LREC-COLING 2024
+## homonymy_disambiguation
 🏦 🏞 Homonymy Disambiguation (coarse-grained WSD). Fully Connnected layers on top of Pretrained Language Models (PLMs).
 
 **WandB runs**: https://wandb.ai/lavallone/homonyms?workspace=user-lavallone
