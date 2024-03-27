@@ -3,12 +3,11 @@ Tried LLMs:
 - "state-spaces/mamba-2.8b-hf"
 - "psmathur/orca_mini_3b"
 - "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-- "CobraMamba/mamba-gpt-3b-v2"
-- "meta-llama/Llama-2-7b-chat-hf"
+- "CobraMamba/mamba-gpt-3b-v2" | 32.18% |
 
 ----------------------------------------------
 7B
-- "meta-llama/Llama-2-7b-chat-hf"
+- "meta-llama/Llama-2-7b-chat-hf" | |
 - "tiiuae/falcon-7b"
 - "mistralai/Mistral-7B-v0.1"
 1B
