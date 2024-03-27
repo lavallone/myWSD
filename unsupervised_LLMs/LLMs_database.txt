@@ -7,6 +7,10 @@ Tried LLMs:
 - "meta-llama/Llama-2-7b-chat-hf"
 
 ----------------------------------------------
-
+7B
+- "meta-llama/Llama-2-7b-chat-hf"
+- "tiiuae/falcon-7b"
+- "mistralai/Mistral-7B-v0.1"
+1B
 - "tiiuae/falcon-rw-1b" --> a seconda del max_new_tokens risponde con tutte o quasi tutte le definizioni disponibili.
 - 
