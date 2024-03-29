@@ -1,7 +1,7 @@
 import torch
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
-from src.eval import eval_pipeline
+from src.eval import eval_selection, eval_generation
 from src.data import data_post_processing
 ## LLAMA2
 # huggingface-cli login ---> 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
@@ -27,7 +27,7 @@ from src.data import data_post_processing
 #     return eval_input_list
 
 # maybe a better choice!
-def generate_with_pipeline(model_name, dataloader, to_quant=False):
+def generate_with_pipeline(model_name, dataloader, to_quant=False, eval_type="selection"):
     if to_quant:
         model = AutoModelForCausalLM.from_pretrained(model_name, load_in_4bit=True) # when we use bigger models
     else:
@@ -46,25 +46,24 @@ def generate_with_pipeline(model_name, dataloader, to_quant=False):
         # with 'pipeline' we can more easily set generation parameters
         generated_sequences = generation_pipeline(
             batch["prompts"],
-            max_new_tokens=50,
+            max_new_tokens=25,
             num_return_sequences=1,
             eos_token_id=tokenizer.eos_token_id,
         )
         outputs = [ out[0]["generated_text"] for out in generated_sequences ]
-        new_outputs = data_post_processing(model_name, outputs)
-        print(new_outputs[0])
+        new_outputs = data_post_processing(batch["prompts"], outputs)
+        #print(new_outputs[0])
         
         for i in range(len(new_outputs)):
             d = {"id" : batch["ids"][i], "answer" : new_outputs[i], "gold_definitions" : batch["gold_definitions"][i]}
-            # filtering for evaluation
-            if new_outputs[i] == "" or "QUESTION" in new_outputs[i]: continue
             eval_input_list.append(d)
         
-        # each n iterations we print EVAL infos
+        # each x iterations we print EVAL infos
         if step % 20 == 0 and step!=0:
-            break
-            print(eval_pipeline(eval_input_list))
-        # after x steps we finish the inferring phase
+            if eval_type == "selection": print(eval_selection(eval_input_list))
+            elif eval_type == "generation": print(eval_generation(eval_input_list))
+            else: print("wrong evaluation type!")
+        # after y steps we finish the inferring phase
         if step == 200: break
         
     return eval_input_list

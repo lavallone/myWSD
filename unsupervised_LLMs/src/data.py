@@ -45,13 +45,9 @@ class WSD_Dataset(Dataset):
         batch_out["gold_definitions"] = [sample["gold_definitions"] for sample in batch]
         return batch_out
     
-def data_post_processing(model_name, outputs):
-    if model_name[:4] == "meta" or model_name[:7] == "mistral":
-        new_outputs = [ out[out.find("ANSWER")+11:] for out in outputs ]
-    elif model_name[7:13] == "falcon":
-        new_outputs = [ out[out.find("ANSWER"):] for out in outputs ]
-    else:
-        print("model not included in the post-processing phase")
-    if model_name[:7] == "mistral" or model_name[7:13] == "falcon":  # in mistral we need to do this additional operations
-        new_outputs = [ e[:e.find("\n")] for e in new_outputs ]
+def data_post_processing(prompts, outputs):
+    new_outputs = []
+    for i in range(len(prompts)):
+        new_output = outputs[i].replace(prompts[i], "")
+        new_outputs.append(new_output)
     return new_outputs
