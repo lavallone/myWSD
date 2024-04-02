@@ -1,6 +1,7 @@
 import torch
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from tqdm import tqdm
+from transformers.pipelines.pt_utils import KeyDataset
 from src.eval import eval_selection, eval_generation
 from src.data import data_post_processing
 ## LLAMA2
@@ -27,9 +28,10 @@ from src.data import data_post_processing
 #     return eval_input_list
 
 # maybe a better choice!
-def generate_with_pipeline(model_name, dataloader, to_quant=False, eval_type="selection"):
+def generate_with_pipeline(model_name, dataset, to_quant=False, eval_type="selection"):
     if to_quant:
         model = AutoModelForCausalLM.from_pretrained(model_name, load_in_4bit=True) # when we use bigger models
+        model = model.bfloat16()
     else:
         model = model_name # is simply a string representing the model name
     tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
@@ -40,30 +42,19 @@ def generate_with_pipeline(model_name, dataloader, to_quant=False, eval_type="se
         torch_dtype=torch.bfloat16,
         device_map="auto",
     )
+    generation_pipeline.tokenizer.pad_token_id = model.config.eos_token_id
     
-    eval_input_list = []
-    for step, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
-        # with 'pipeline' we can more easily set generation parameters
-        generated_sequences = generation_pipeline(
-            batch["prompts"],
-            max_new_tokens=25,
-            num_return_sequences=1,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-        outputs = [ out[0]["generated_text"] for out in generated_sequences ]
-        new_outputs = data_post_processing(batch["prompts"], outputs)
-        #print(new_outputs[0])
-        
-        for i in range(len(new_outputs)):
-            d = {"id" : batch["ids"][i], "answer" : new_outputs[i], "gold_definitions" : batch["gold_definitions"][i]}
-            eval_input_list.append(d)
-        
-        # each x iterations we print EVAL infos
-        if step % 20 == 0 and step!=0:
-            if eval_type == "selection": print(eval_selection(eval_input_list))
-            elif eval_type == "generation": print(eval_generation(eval_input_list))
-            else: print("wrong evaluation type!")
-        # after y steps we finish the inferring phase
-        if step == 200: break
-        
+    generated_sequences = generation_pipeline(KeyDataset(dataset, "prompt"), 
+                                                batch_size=4, 
+                                                max_new_tokens=25,
+                                                num_return_sequences=1,
+                                                eos_token_id=tokenizer.eos_token_id,)
+    outputs = []
+    for output in tqdm(generated_sequences):
+        outputs += [ e["generated_text"] for e in output]
+    prompts = [ dataset.data[i]["prompt"] for i in range(len(dataset.data)) ]
+    assert len(outputs) == len(prompts)
+    new_outputs = data_post_processing(prompts, outputs)
+    
+    eval_input_list = [ {"id" : dataset.data[i]["id"], "answer" : new_outputs[i], "gold_definitions" : dataset.data[i]["gold_definitions"]} for i in range(len(dataset.data)) ]
     return eval_input_list

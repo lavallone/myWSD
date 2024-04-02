@@ -26,7 +26,7 @@ def eval_selection(eval_input_list):
         union = answer_tokenized_set.union(gold_definition_tokenized_set)
         lexical_overlap = len(intersection) / len(union)
         ris.append(lexical_overlap)
-    return torch.tensor(ris).mean()
+    return f"| SELECTION SCORE is {round(torch.tensor(ris).mean().item(), 2)} |"
 
 def eval_generation(eval_input_list):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,4 +41,4 @@ def eval_generation(eval_input_list):
         cos_sim = CosineSimilarity(dim=1, eps=1e-6)
         similarity_score = cos_sim(emb_1, emb_2).item()
         ris.append(similarity_score)
-    return torch.tensor(ris).mean()
+    return f"| GENERATION SCORE is {round(torch.tensor(ris).mean().item(), 2)} |"
