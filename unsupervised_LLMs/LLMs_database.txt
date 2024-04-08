@@ -1,15 +1,13 @@
 Tried LLMs:
 
-- "state-spaces/mamba-2.8b-hf"
-- "psmathur/orca_mini_3b"
-- "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-- "CobraMamba/mamba-gpt-3b-v2" | 32.18% |
+7B (quantized to 4 bit)
+- meta-llama/Llama-2-7b-chat-hf
+- tiiuae/falcon-7b
+- mistralai/Mistral-7B-v0.1
 
-----------------------------------------------
-7B
-- "meta-llama/Llama-2-7b-chat-hf"
-- "tiiuae/falcon-7b"
-- "mistralai/Mistral-7B-v0.1"
-1B
-- "tiiuae/falcon-rw-1b" --> a seconda del max_new_tokens risponde con tutte o quasi tutte le definizioni disponibili.
-- 
+1B/3B
+- (CobraMamba/mamba-gpt-3b-v4)
+- bigscience/bloom-3b
+- tiiuae/falcon-rw-1b
+- facebook/opt-2.7b
+- openlm-research/open_llama_3b_v2

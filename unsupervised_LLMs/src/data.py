@@ -23,7 +23,7 @@ class WSD_Dataset(Dataset):
         ris = []
         with open(self.data_path) as f:
             data = json.load(f)
-        for i in tqdm(range(len(data))):#[:8]):
+        for i in tqdm(range(len(data))[:200]):
             item = {}
             item["id"] = data[i]["id"]
             item["prompt"] = self.generate_prompt(data[i]["text"], data[i]["word"], data[i]["definitions"])

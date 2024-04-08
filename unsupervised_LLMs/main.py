@@ -5,12 +5,12 @@ from src.eval import eval_selection, eval_generation
 from src.LLMs_generation import generate_with_pipeline
 
 if __name__ == '__main__':
-    model_name = "meta-llama/Llama-2-7b-chat-hf"
+    model_name = "openlm-research/open_llama_3b_v2"
     dataset = WSD_Dataset("data/ALL_preprocessed.json")
     
-    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=4, collate_fn=WSD_Dataset.collate_batch)
+    #dataloader = DataLoader(dataset, batch_size=8, shuffle=False, num_workers=4, collate_fn=WSD_Dataset.collate_batch)
     to_quant = True # if we need to quantize the model or not
-    eval_type = "selection" # "selection" or "generation"
+    eval_type = "generation" # "selection" or "generation"
     
     eval_input_list = generate_with_pipeline(model_name, dataset, to_quant, eval_type)
     #eval_input_list = generate(model_name, dataloader)

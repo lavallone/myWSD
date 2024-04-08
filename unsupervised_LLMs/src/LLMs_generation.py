@@ -29,11 +29,10 @@ from src.data import data_post_processing
 
 # maybe a better choice!
 def generate_with_pipeline(model_name, dataset, to_quant=False, eval_type="selection"):
-    if to_quant:
-        model = AutoModelForCausalLM.from_pretrained(model_name, load_in_4bit=True) # when we use bigger models
-        model = model.bfloat16()
-    else:
-        model = model_name # is simply a string representing the model name
+    if to_quant: load_in_4bit = True # when we use bigger models
+    else: load_in_4bit = False # otherwise
+    model = AutoModelForCausalLM.from_pretrained(model_name, load_in_4bit=load_in_4bit) # when we use bigger models
+    model = model.bfloat16()
     tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
     generation_pipeline = pipeline(
         "text-generation",
