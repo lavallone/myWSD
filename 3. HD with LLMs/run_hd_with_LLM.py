@@ -8,6 +8,7 @@ import torch
 import os
 import nltk
 from sklearn.metrics import f1_score
+from openai import OpenAI
 
 SHORTCUT2FULLNAME = {"mistral" : "mistralai/Mistral-7B-Instruct-v0.2", "h2o_ai": "h2oai/h2o-danube2-1.8b-chat"}
 
@@ -66,47 +67,60 @@ def _generate_prompt(instance:dict, eval_type:str, approach:str):
     
     return prompt
 
-def _get_gold_data():
+def _get_gold_data(test_data):
     """
     Loads gold data from a JSON file.
 
     Returns:
         dict: A dictionary containing the loaded gold data.
     """
-    data_path = "data/LLMantics_test.json"
+    data_path = f"data/LLMantics/converted/{test_data}.json"
     with open(data_path, "r") as json_file:
         gold_data = json.load(json_file)
     return gold_data
 
-def disambiguate(eval_type : str, approach : str, shortcut_model_name : str):
+def _disambiguate_gpt(client, model, prompt):
+    response = client.chat.completions.create(
+        model=model,
+        messages=[ {"role": "user", "content": prompt } ],
+        max_tokens=25,
+        )
+    answer = response.choices[0].message.content
+    return answer
+
+def disambiguate(test_data : str, eval_type : str, approach : str, shortcut_model_name : str, client=None):
     
+    assert test_data in supported_test_data
     assert eval_type in supported_eval_types
     assert approach in supported_approaches
     assert shortcut_model_name in supported_shortcut_model_names
 
-    gold_data = _get_gold_data()
-    output_file_path = f"data/LLM_output/{eval_type}/{approach}/{shortcut_model_name}"
+    gold_data = _get_gold_data(test_data)
+    output_file_path = f"data/LLM_output/{test_data}/{eval_type}/{approach}/{shortcut_model_name}"
     n_instances_processed = 0
     json_data = []
 
     # to manage creation/deletion of folders
     if not os.path.exists(f"data/LLM_output/"):
         os.system(f"mkdir data/LLM_output/")
-    if not os.path.exists(f"data/LLM_output/{eval_type}/"):
-        os.system(f"mkdir data/LLM_output/{eval_type}/")
-    if not os.path.exists(f"data/LLM_output/{eval_type}/{approach}/"):
-        os.system(f"mkdir data/LLM_output/{eval_type}/{approach}/")
+    if not os.path.exists(f"data/LLM_output/{test_data}/"):
+        os.system(f"mkdir data/LLM_output/{test_data}/")
+    if not os.path.exists(f"data/LLM_output/{test_data}/{eval_type}/"):
+        os.system(f"mkdir data/LLM_output/{test_data}/{eval_type}/")
+    if not os.path.exists(f"data/LLM_output/{test_data}/{eval_type}/{approach}/"):
+        os.system(f"mkdir data/LLM_output/{test_data}/{eval_type}/{approach}/")
     if not os.path.exists(output_file_path):
         os.system(f"mkdir {output_file_path}")
     elif os.path.exists(f"{output_file_path}/output.txt"):
         countdown(5)
         os.system(f"rm -r {output_file_path}/*")
 
-    full_model_name = SHORTCUT2FULLNAME[shortcut_model_name]
-    tokenizer = AutoTokenizer.from_pretrained(full_model_name, trust_remote_code=True)
-    tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(full_model_name, trust_remote_code=True, torch_dtype=torch.float16).cuda()
-    pipe = pipeline("text-generation", model=model, device="cuda", tokenizer=tokenizer, pad_token_id=tokenizer.eos_token_id, max_new_tokens=25)
+    if shortcut_model_name != "gpt_4":
+        full_model_name = SHORTCUT2FULLNAME[shortcut_model_name]
+        tokenizer = AutoTokenizer.from_pretrained(full_model_name, trust_remote_code=True)
+        tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained(full_model_name, trust_remote_code=True, torch_dtype=torch.float16).cuda()
+        pipe = pipeline("text-generation", model=model, device="cuda", tokenizer=tokenizer, pad_token_id=tokenizer.eos_token_id, max_new_tokens=25)
 
     with open(f"{output_file_path}/output.txt", "a") as fa_txt, open(f"{output_file_path}/output.json", "w") as fw_json:
         for instance in tqdm(gold_data, total=len(gold_data)):
@@ -115,10 +129,14 @@ def disambiguate(eval_type : str, approach : str, shortcut_model_name : str):
             instance_id = instance["id"]
             
             prompt = _generate_prompt(instance, eval_type, approach)
-            # proviamo con chat_template... in caso si leva
-            chat = [{"role": "user", "content": prompt}]
-            prompt_template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-            answer = pipe(prompt_template)[0]["generated_text"].replace(prompt_template, "").replace("\n", "").strip()
+            
+            if shortcut_model_name == "gpt_4":
+                answer = _disambiguate_gpt(client, model, prompt)
+            else: 
+                # proviamo con chat_template... in caso si leva
+                chat = [{"role": "user", "content": prompt}]
+                prompt_template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+                answer = pipe(prompt_template)[0]["generated_text"].replace(prompt_template, "").replace("\n", "").strip()
             
             fa_txt.write(f"{instance_id}\t{answer}\n")
             fa_txt.flush()
@@ -163,10 +181,10 @@ def _get_disambiguated_data(disambiguated_data_path:str):
         disambiguated_data = json.load(json_file)
     return disambiguated_data
 
-def score(eval_type : str, approach : str, shortcut_model_name : str):
+def score(test_data: str, eval_type : str, approach : str, shortcut_model_name : str):
     
-    disambiguated_data_path = f"data/LLM_output/{eval_type}/{approach}/{shortcut_model_name}/output.json"
-    gold_data = _get_gold_data()
+    disambiguated_data_path = f"data/LLM_output/{test_data}/{eval_type}/{approach}/{shortcut_model_name}/output.json"
+    gold_data = _get_gold_data(test_data)
     disambiguated_data = _get_disambiguated_data(disambiguated_data_path)
     assert len(gold_data) == len(disambiguated_data)
     
@@ -193,11 +211,11 @@ def score(eval_type : str, approach : str, shortcut_model_name : str):
             if eval_type == "wsd2hd":
                 if selected_definition in instance_gold["cluster_gold_definitions"][0]: correct += 1
                 else: predicted_labels[global_idx] = 0; wrong += 1
-            else: # eval_type == "wsd"
+            else: # "wsd"
                 if selected_definition in instance_gold["gold_definitions"]: correct += 1
                 else: predicted_labels[global_idx] = 0; wrong += 1
             global_idx += 1
-    else: # eval_type == hd    
+    else: # "hd"    
         for instance_gold, instance_disambiguated_data in zip(gold_data, disambiguated_data):
             assert instance_gold["id"] == instance_disambiguated_data["instance_id"]
             answer = instance_disambiguated_data["answer"]
@@ -209,10 +227,13 @@ def score(eval_type : str, approach : str, shortcut_model_name : str):
             global_idx += 1
         
     assert correct+wrong == len(gold_data)
-    f1_score_ = f1_score(true_labels, predicted_labels, average='micro')
+    f1 = f1_score(true_labels, predicted_labels, average='micro')
+    print("-----")
+    print("Total number of instances:", len(gold_data))
+    print("Number of correctly classified instances:", correct)
+    print("Number of incorrectly classified instances:", wrong)
     print()
-    print(f"F1 score of {shortcut_model_name} in {eval_type} setting using {approach} is {f1_score_}")
-    
+    print("F1 Score (average=micro):", f1)
         
 if __name__ == "__main__":
 
@@ -220,18 +241,28 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=FutureWarning)
 
     supported_mode = ["disambiguate", "score"]
+    supported_test_data = ["test", "test_FGA", "test_HA", "test_HA_p"]
     supported_eval_types = ["wsd", "wsd2hd", "hd"]
     supported_approaches = ["zero_shot", "one_shot", "few_shot"]
     supported_shortcut_model_names = ["mistral", "h2o_ai", "gpt_4"]
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", "-m", type=str)
+    parser.add_argument("--test_data", "-d", type=str)
     parser.add_argument("--eval_type", "-em", type=str)
     parser.add_argument("--approach", "-a", type=str)
     parser.add_argument("--shortcut_model_name", "-mn", type=str)
     args = parser.parse_args()
     
+    assert args.test_data!="test_FGA" or args.eval_type=="wsd"
+    assert args.test_data!="test_HA" or args.eval_type=="hd" or args.eval_type=="wsd2hd"
+    assert args.test_data!="test_HA_p" or args.eval_type=="hd" or args.eval_type=="wsd2hd"
+    
     if args.mode == "disambiguate":
-        disambiguate(args.eval_type, args.approach, args.shortcut_model_name)
+        if args.shortcut_model_name == "gpt_4":
+            client = OpenAI()
+            disambiguate(args.test_data, args.eval_type, args.approach, args.shortcut_model_name, client = client)
+        else:
+            disambiguate(args.test_data, args.eval_type, args.approach, args.shortcut_model_name)
     else:
-        score(args.eval_type, args.approach, args.shortcut_model_name)
+        score(args.test_data, args.eval_type, args.approach, args.shortcut_model_name)
