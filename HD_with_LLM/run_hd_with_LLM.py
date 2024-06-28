@@ -85,17 +85,17 @@ def disambiguate(eval_type : str, approach : str, shortcut_model_name : str):
     assert shortcut_model_name in supported_shortcut_model_names
 
     gold_data = _get_gold_data()
-    output_file_path = f"../../data/LLM_output/{eval_type}/{approach}/{shortcut_model_name}"
+    output_file_path = f"data/LLM_output/{eval_type}/{approach}/{shortcut_model_name}"
     n_instances_processed = 0
     json_data = []
 
     # to manage creation/deletion of folders
-    if not os.path.exists(f"../../data/LLM_output/"):
-        os.system(f"mkdir ../../data/LLM_output/")
-    if not os.path.exists(f"../../data/n_shot_analysis/{eval_type}/"):
-        os.system(f"mkdir ../../data/n_shot_analysis/{eval_type}/")
-    if not os.path.exists(f"../../data/n_shot_analysis/{eval_type}/{approach}/"):
-        os.system(f"mkdir ../../data/n_shot_analysis/{eval_type}/{approach}/")
+    if not os.path.exists(f"data/LLM_output/"):
+        os.system(f"mkdir data/LLM_output/")
+    if not os.path.exists(f"data/LLM_output/{eval_type}/"):
+        os.system(f"mkdir data/LLM_output/{eval_type}/")
+    if not os.path.exists(f"data/LLM_output/{eval_type}/{approach}/"):
+        os.system(f"mkdir data/LLM_output/{eval_type}/{approach}/")
     if not os.path.exists(output_file_path):
         os.system(f"mkdir {output_file_path}")
     elif os.path.exists(f"{output_file_path}/output.txt"):
@@ -222,7 +222,7 @@ if __name__ == "__main__":
     supported_mode = ["disambiguate", "score"]
     supported_eval_types = ["wsd", "wsd2hd", "hd"]
     supported_approaches = ["zero_shot", "one_shot", "few_shot"]
-    supported_shortcut_model_names = ["mistral", "gpt_4"]
+    supported_shortcut_model_names = ["mistral", "h2o_ai", "gpt_4"]
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", "-m", type=str)
