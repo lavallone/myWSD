@@ -48,7 +48,6 @@ def countdown(t):
 
 def _generate_prompt(instance:dict, eval_type:str, approach:str):
     
-    if eval_type == "wsd2hd": eval_type = "wsd"
     word = instance["word"]
     text = instance["text"].replace(" ,", ",").replace(" .", ".")
     
@@ -95,6 +94,7 @@ def disambiguate(test_data : str, eval_type : str, approach : str, shortcut_mode
     assert approach in supported_approaches
     assert shortcut_model_name in supported_shortcut_model_names
 
+    if eval_type == "wsd2hd": eval_type = "wsd"
     gold_data = _get_gold_data(test_data)
     output_file_path = f"data/LLM_output/{test_data}/{eval_type}/{approach}/{shortcut_model_name}"
     n_instances_processed = 0
@@ -201,6 +201,11 @@ def score(test_data: str, eval_type : str, approach : str, shortcut_model_name :
                 for idx_, gold_definition in enumerate(instance_gold["gold_definitions"]): # because there may be more than one gold candidate
                     if definition == gold_definition:
                         instance_gold["gold_definitions"][idx_] = f"{idx}) {instance_gold['gold_definitions'][idx_]}"
+            # adds n) before each cluster gold definition
+            for idx, definition in enumerate(instance_gold["definitions"]):
+                for idx_, cluster_gold_definition in enumerate(instance_gold["cluster_gold_definitions"][0]):
+                    if definition == cluster_gold_definition:
+                        instance_gold["cluster_gold_definitions"][0][idx_] = f"{idx}) {instance_gold['cluster_gold_definitions'][0][idx_]}"
             # adds n) before all candidate definitions
             for idx, definition in enumerate(instance_gold["definitions"]):
                 instance_gold["definitions"][idx] = f"{idx}) {definition}"
@@ -209,6 +214,8 @@ def score(test_data: str, eval_type : str, approach : str, shortcut_model_name :
             else:  selected_definition = _choose_definition(instance_gold, answer)
             
             if eval_type == "wsd2hd":
+                print(f"{selected_definition}")
+                print(instance_gold["cluster_gold_definitions"][0])
                 if selected_definition in instance_gold["cluster_gold_definitions"][0]: correct += 1
                 else: predicted_labels[global_idx] = 0; wrong += 1
             else: # "wsd"
