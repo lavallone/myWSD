@@ -8,9 +8,8 @@ import torch
 import os
 import nltk
 from sklearn.metrics import f1_score
-from openai import OpenAI
 
-SHORTCUT2FULLNAME = {"mistral" : "mistralai/Mistral-7B-Instruct-v0.2", "h2o_ai" : "h2oai/h2o-danube2-1.8b-chat", "gpt_4" : "gpt-4-turbo"}
+SHORTCUT2FULLNAME = {"mistral" : "mistralai/Mistral-7B-Instruct-v0.2", "h2o_ai" : "h2oai/h2o-danube2-1.8b-chat", "llama_3" : "meta-llama/Meta-Llama-3-8B-Instruct", "gemma" : "google/gemma-2-9b-it"}
 
 PROMPTS = {
            "wsd" : {
@@ -87,7 +86,7 @@ def _disambiguate_gpt(client, model, prompt):
     answer = response.choices[0].message.content
     return answer
 
-def disambiguate(eval_type : str, approach : str, shortcut_model_name : str, client=None):
+def disambiguate(eval_type : str, approach : str, shortcut_model_name : str):
 
     gold_data = _get_gold_data()
     output_file_path = f"data/LLM_output/{eval_type}/{approach}/{shortcut_model_name}"
@@ -108,11 +107,10 @@ def disambiguate(eval_type : str, approach : str, shortcut_model_name : str, cli
         os.system(f"rm -r {output_file_path}/*")
 
     full_model_name = SHORTCUT2FULLNAME[shortcut_model_name]
-    if shortcut_model_name != "gpt_4":
-        tokenizer = AutoTokenizer.from_pretrained(full_model_name, trust_remote_code=True)
-        tokenizer.pad_token = tokenizer.eos_token
-        model = AutoModelForCausalLM.from_pretrained(full_model_name, trust_remote_code=True, torch_dtype=torch.float16).cuda()
-        pipe = pipeline("text-generation", model=model, device="cuda", tokenizer=tokenizer, pad_token_id=tokenizer.eos_token_id, max_new_tokens=25)
+    tokenizer = AutoTokenizer.from_pretrained(full_model_name, trust_remote_code=True)
+    tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(full_model_name, trust_remote_code=True, torch_dtype=torch.float16).cuda()
+    pipe = pipeline("text-generation", model=model, device="cuda", tokenizer=tokenizer, pad_token_id=tokenizer.eos_token_id, max_new_tokens=25)
 
     with open(f"{output_file_path}/output.txt", "a") as fa_txt, open(f"{output_file_path}/output.json", "w") as fw_json:
         for instance in tqdm(gold_data, total=len(gold_data)):
@@ -121,14 +119,9 @@ def disambiguate(eval_type : str, approach : str, shortcut_model_name : str, cli
             instance_id = instance["id"]
             
             prompt = _generate_prompt(instance, eval_type, approach)
-            
-            if shortcut_model_name == "gpt_4":
-                answer = _disambiguate_gpt(client, full_model_name, prompt)
-            else: 
-                # proviamo con chat_template... in caso si leva
-                chat = [{"role": "user", "content": prompt}]
-                prompt_template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-                answer = pipe(prompt_template)[0]["generated_text"].replace(prompt_template, "").replace("\n", "").strip()
+            chat = [{"role": "user", "content": prompt}]
+            prompt_template = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+            answer = pipe(prompt_template)[0]["generated_text"].replace(prompt_template, "").replace("\n", "").strip()
             
             fa_txt.write(f"{instance_id}\t{answer}\n")
             fa_txt.flush()
@@ -279,10 +272,6 @@ if __name__ == "__main__":
     assert args.test_data!="ha_p" or args.eval_type=="hd" or args.eval_type=="wsd2hd"
     
     if args.mode == "disambiguate":
-        if args.shortcut_model_name == "gpt_4":
-            openai_client = OpenAI()
-            disambiguate(args.eval_type, args.approach, args.shortcut_model_name, client = openai_client)
-        else:
-            disambiguate(args.eval_type, args.approach, args.shortcut_model_name)
+        disambiguate(args.eval_type, args.approach, args.shortcut_model_name)
     else:
         score(args.test_data, args.eval_type, args.approach, args.shortcut_model_name)
