@@ -246,7 +246,7 @@ if __name__ == "__main__":
     supported_test_data = ["all", "fga", "ha", "ha_p"]
     supported_eval_types = ["wsd", "wsd2hd", "hd"]
     supported_approaches = ["zero_shot", "one_shot", "few_shot"]
-    supported_shortcut_model_names = ["mistral", "h2o_ai", "gpt_4"]
+    supported_shortcut_model_names = ["mistral", "h2o_ai", "gpt_4", "llama_3", "gemma"]
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", "-m", type=str)
