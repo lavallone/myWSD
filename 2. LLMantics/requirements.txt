@@ -1,0 +1,17 @@
+transformers
+tqdm
+torch
+scikit-learn
+numpy
+nltk
+sentence_transformers
+sentencepiece
+protobuf
+datasets
+peft
+trl
+bitsandbytes
+accelerate==0.27.2
+flash-attn
+tiktoken
+pytest
